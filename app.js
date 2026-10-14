@@ -107,9 +107,12 @@ function onSearchInput(e) {
   const q = e.target.value.trim().toLowerCase();
   const box = $('#suggestBox');
   if (q.length < 2) { box.classList.remove('open'); return; }
-  const hits = PRODUCTS.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + prodMainLabel(p)).toLowerCase().includes(q)).slice(0, 6);
-  if (!hits.length) { box.classList.remove('open'); return; }
-  box.innerHTML = hits.map((p) => `<a href="#product/${p.id}"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}</span><span class="s-price">${fmt(p.price)}</span></a>`).join('');
+  /* exact SKU match ranks first */
+  const exactSku = PRODUCTS.find((p) => (p.sku || '').toLowerCase() === q);
+  const hits = PRODUCTS.filter((p) => p !== exactSku && (p.nameEn + ' ' + p.nameBn + ' ' + (p.sku || '') + ' ' + prodMainLabel(p)).toLowerCase().includes(q)).slice(0, 6);
+  const ordered = exactSku ? [exactSku, ...hits].slice(0, 6) : hits;
+  if (!ordered.length) { box.classList.remove('open'); return; }
+  box.innerHTML = ordered.map((p) => `<a href="#product/${p.id}"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}${p.sku ? `<small class="s-sku">${esc(p.sku)}</small>` : ''}</span><span class="s-price">${fmt(p.price)}</span></a>`).join('');
   box.classList.add('open');
 }
 
@@ -167,60 +170,31 @@ function prodCard(p) {
   </article>`;
 }
 
-/* ---------------- HOME ---------------- */
+/* ---------------- HOME (compact) ---------------- */
 function viewHome() {
-  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && p.stock > 0).slice(0, 8);
-  const best = PRODUCTS.filter((p) => p.tag === 'best-seller').slice(0, 8);
-  const fresh = PRODUCTS.filter((p) => p.tag === 'new').slice(0, 8);
-  const featured = PRODUCTS.filter((p) => p.tag === 'featured').slice(0, 4);
-  const slides = [
-    { img: 'https://images.unsplash.com/photo-1603252109303-2751441dd157?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'ঈদ কালেকশন ২০২৬ — নতুন পাঞ্জাবি' : 'Eid Collection 2026 — New Panjabi', s: LANG === 'bn' ? '৩০% পর্যন্ত ছাড়, সারা বাংলাদেশে ডেলিভারি' : 'Up to 30% off, delivery across Bangladesh', cta: 'shop?main=men&sub=panjabi' },
-    { img: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'স্টাইলিশ স্নিকার্স কালেকশন' : 'Stylish Sneakers Collection', s: LANG === 'bn' ? 'আরাম + স্টাইল, একসাথে' : 'Comfort + style, together', cta: 'shop?main=men&sub=sneakers' },
-    { img: 'https://images.unsplash.com/photo-1541643600914-78b084683601?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'প্রিমিয়াম আতর — দীর্ঘস্থায়ী সুগন্ধি' : 'Premium Attar — Long-lasting Fragrance', s: LANG === 'bn' ? 'আসল সুগন্ধি, সেরা দামে' : 'Authentic fragrance at the best price', cta: 'shop?main=cosmetics&sub=attar' },
-  ];
+  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && p.stock > 0).slice(0, 4);
+  const best = PRODUCTS.filter((p) => p.tag === 'best-seller').slice(0, 4);
   const mains = visibleMains();
-  const showcaseMains = mains.filter((m) => ['men', 'women'].includes(m.slug));
   return `
-  <div class="hero" id="heroBox">${slides.map((s, i) => `<div class="hero-slide ${i === 0 ? 'active' : ''}"><img src="${s.img}" alt="" onerror="this.src='${FALLBACK_IMG}'"><div class="hero-overlay"><h1>${esc(s.h)}</h1><p>${esc(s.s)}</p><div><a class="btn" href="#" onclick="event.preventDefault();location.hash='#${s.cta}'">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div></div>`).join('')}
-  <div class="hero-dots">${slides.map((_, i) => `<button data-dot="${i}" class="${i === 0 ? 'on' : ''}"></button>`).join('')}</div></div>
+  <div class="hero hero-single"><img src="cover.jpg" alt="AURA LIFESTYLE"><div class="hero-cta"><a class="btn" href="#shop">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div>
 
   <section class="section"><div class="section-head"><h2>${t('categories')}</h2><a href="#shop">${t('viewAll')} →</a></div>
   <div class="main-cat-grid">${mains.map((m) => {
-    const count = PRODUCTS.filter((p) => p.main === m.slug && p.stock >= 0).length;
     const subNames = m.subs.slice(0, 3).map((s) => LANG === 'bn' ? s.bn : s.en).join(' • ');
-    return `<a class="main-cat-card" href="#shop?main=${m.slug}"><img src="${esc(m.img)}" alt="${esc(LANG === 'bn' ? m.bn : m.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span class="mc-name">${esc(LANG === 'bn' ? m.bn : m.en)}</span><span class="mc-subs">${esc(subNames)}</span><span class="mc-count">${count} ${LANG === 'bn' ? 'টি প্রোডাক্ট' : 'products'}</span></a>`;
+    return `<a class="main-cat-card" href="#shop?main=${m.slug}"><img src="${esc(m.img)}" alt="${esc(LANG === 'bn' ? m.bn : m.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span class="mc-name">${esc(LANG === 'bn' ? m.bn : m.en)}</span><span class="mc-subs">${esc(subNames)}</span></a>`;
   }).join('')}</div></section>
 
-  ${showcaseMains.map((m) => {
-    const rows = PRODUCTS.filter((p) => p.main === m.slug && p.stock > 0).slice(0, 4);
-    if (!rows.length) return '';
-    return `<section class="section"><div class="section-head"><h2>${esc(LANG === 'bn' ? m.bn : m.en)}</h2><a href="#shop?main=${m.slug}">${t('viewAll')} →</a></div>
-    <div class="cat-showcase"><div class="cs-banner"><img src="${esc(m.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><div class="cs-overlay"><h3>${esc(LANG === 'bn' ? m.bn : m.en)}</h3><p>${m.subs.map((s) => LANG === 'bn' ? s.bn : s.en).join(' • ')}</p><a class="btn" href="#shop?main=${m.slug}">${LANG === 'bn' ? 'সব দেখুন' : 'View All'}</a></div></div>
-    <div class="prod-row">${rows.map(prodCard).join('')}</div></div></section>`;
-  }).join('')}
-
-  ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:16px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
+  ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:14px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
 
   <section class="section"><div class="section-head"><h2>${t('best')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${best.map(prodCard).join('')}</div></section>
 
-  ${featured.length ? `<section class="section"><div class="combo-box"><div class="section-head"><h2>${t('combo')}</h2></div><div class="prod-row">${featured.map(prodCard).join('')}</div></div></section>` : ''}
-
-  <section class="section"><div class="section-head"><h2>${t('newArr')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${fresh.map(prodCard).join('')}</div></section>
-
-  <div class="trust-row">
-    <div class="trust"><b>Cash on Delivery</b><p>পণ্য হাতে পেয়ে টাকা দিন — কোনো অগ্রিম পেমেন্ট নয়</p></div>
-    <div class="trust"><b>Easy Return</b><p>৭ দিনের মধ্যে সহজ রিটার্ন / এক্সচেঞ্জ</p></div>
-    <div class="trust"><b>Fast Delivery</b><p>ঢাকায় ২৪–৪৮ ঘণ্টা, ঢাকার বাইরে ২–৪ দিন</p></div>
-  </div>
+  <div class="promo-strip"><div><b>${LANG === 'bn' ? 'ফ্রি ডেলিভারি' : 'Free Delivery'}</b><span>${LANG === 'bn' ? '৳২০০০+ অর্ডারে সারা বাংলাদেশে ফ্রি ডেলিভারি' : 'On orders above ৳2000, all over Bangladesh'}</span></div><a class="btn" href="#shop">${LANG === 'bn' ? 'শপ করুন' : 'Shop'}</a></div>
 
   <section class="section"><div class="section-head"><h2>${t('testi')}</h2></div>
-  <div class="testi-grid">${SEED_TESTIMONIALS.map((x) => `<div class="testi"><div class="stars">${stars(x.rating)}</div><p>"${esc(x.text)}"</p><b>${esc(x.name)}</b><span>${esc(x.loc)}</span></div>`).join('')}</div></section>
+  <div class="testi-grid">${SEED_TESTIMONIALS.slice(0, 3).map((x) => `<div class="testi"><div class="stars">${stars(x.rating)}</div><p>"${esc(x.text)}"</p><b>${esc(x.name)}</b><span>${esc(x.loc)}</span></div>`).join('')}</div></section>
 
-  <section class="section"><div class="newsletter"><h2>নতুন অফার সবার আগে পান</h2><p style="margin:8px 0 16px; color:#cfd6e8">ইমেইল দিয়ে সাবস্ক্রাইব করুন — স্প্যাম নয়, শুধু অফার।</p>
-  <form id="nlForm"><input type="email" id="nlEmail" placeholder="আপনার ইমেইল" required><button class="btn" type="submit">Subscribe</button></form></div></section>
-
-  <section class="section"><div class="section-head"><h2>সাধারণ প্রশ্ন (FAQ)</h2><a href="#faq">সব প্রশ্ন →</a></div>
-  ${SEED_FAQS.slice(0, 3).map((f) => `<div class="faq-item"><div class="faq-q">${esc(f.q)} <span>+</span></div><div class="faq-a">${esc(f.a)}</div></div>`).join('')}</section>`;
+  <section class="section"><div class="newsletter"><h2>নতুন অফার সবার আগে পান</h2>
+  <form id="nlForm"><input type="email" id="nlEmail" placeholder="আপনার ইমেইল" required><button class="btn" type="submit">Subscribe</button></form></div></section>`;
 }
 
 /* ---------------- SHOP ---------------- */
@@ -233,7 +207,13 @@ function viewShop(params) {
   let list = PRODUCTS.filter((p) => p.stock >= 0);
   if (main) list = list.filter((p) => p.main === main);
   if (sub) list = list.filter((p) => p.sub === sub);
-  if (q) list = list.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + prodMainLabel(p)).toLowerCase().includes(q));
+  if (q) {
+    /* exact SKU match jumps to the front */
+    const exactSku = list.find((p) => (p.sku || '').toLowerCase() === q);
+    list = list.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + (p.sku || '') + ' ' + prodMainLabel(p)).toLowerCase().includes(q));
+    if (exactSku && list.includes(exactSku)) list = [exactSku, ...list.filter((p) => p !== exactSku)];
+  }
+  const isSkuQuery = /^[a-z]\d+$/i.test(q);
   if (maxPrice > 0) list = list.filter((p) => p.price <= maxPrice);
   if (sort === 'low') list = [...list].sort((a, b) => a.price - b.price);
   else if (sort === 'high') list = [...list].sort((a, b) => b.price - a.price);
@@ -264,8 +244,7 @@ function viewShop(params) {
     <button class="chip sub-chip ${!sub ? 'on' : ''}" onclick="location.hash='#shop?main=${main}'">${LANG === 'bn' ? 'সব' : 'All'}</button>
     ${subs.map((s) => `<button class="chip sub-chip ${sub === s.slug ? 'on' : ''}" onclick="location.hash='#shop?main=${main}&sub=${s.slug}'">${esc(LANG === 'bn' ? s.bn : s.en)}</button>`).join('')}
   </div>` : ''}
-  <p class="result-count">${list.length}টি প্রোডাক্ট পাওয়া গেছে</p>
-  ${slice.length ? `<div class="prod-row">${slice.map(prodCard).join('')}</div>` : `<div class="empty"><h3>কোনো প্রোডাক্ট পাওয়া যায়নি</h3><p>অন্য ক্যাটাগরি বা দাম দিয়ে চেষ্টা করুন।</p></div>`}
+  ${slice.length ? `<div class="prod-row">${slice.map(prodCard).join('')}</div>` : `<div class="empty"><h3>${isSkuQuery ? (LANG === 'bn' ? 'Not Found — এই কোডের কোনো প্রোডাক্ট নেই' : 'Not Found — no product matches this code') : (LANG === 'bn' ? 'কোনো প্রোডাক্ট পাওয়া যায়নি' : 'No products found')}</h3><p>${isSkuQuery ? (LANG === 'bn' ? 'কোডটি ঠিক আছে কিনা দেখুন (যেমন: A100001)' : 'Check the code is correct (e.g. A100001)') : (LANG === 'bn' ? 'অন্য ক্যাটাগরি বা দাম দিয়ে চেষ্টা করুন।' : 'Try another category or price.')}</p></div>`}
   ${pages > 1 ? `<div class="pager">${Array.from({ length: pages }, (_, i) => `<button class="${page === i + 1 ? 'on' : ''}" onclick="location.hash='${base}&page=${i + 1}'">${i + 1}</button>`).join('')}</div>` : ''}
   </section>`;
 }
@@ -285,6 +264,7 @@ function viewProduct(id) {
     <div>
       <span style="color:var(--muted); font-size:13px">${esc(prodMainLabel(p))}</span>
       <h1>${esc(name)}</h1>
+      ${p.sku ? `<div class="sku-line">SKU: <b>${esc(p.sku)}</b></div>` : ''}
       <div class="stars">${stars(4.5)} <span style="color:var(--muted); font-size:13px">(4.5)</span></div>
       <div class="pd-price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}${off > 0 ? ` <span style="color:var(--red); font-weight:700">-${off}% ছাড়</span>` : ''}</div>
       <p class="desc">${esc(desc)}</p>
@@ -383,10 +363,26 @@ function viewCheckout() {
       <div class="field"><label>অর্ডার নোট (ঐচ্ছিক)</label><textarea id="coNote" rows="2" placeholder="ডেলিভারি সংক্রান্ত কোনো নির্দেশনা"></textarea></div>
     </div>
     <div class="card" style="margin-top:16px"><h3>Payment Method</h3>
-      <label class="pay-opt sel"><input type="radio" name="pay" value="cod" checked style="display:none"><b>ক্যাশ অন ডেলিভারি (COD)</b><span>পণ্য হাতে পেয়ে টাকা পরিশোধ করুন। কোনো অগ্রিম পেমেন্ট নয়।</span></label>
-      <label class="pay-opt"><input type="radio" name="pay" value="bkash" style="display:none"><b>বিকাশ (Send Money)</b><span>${esc(SETTINGS.bkash)} নম্বরে সেন্ড মানি করে TrxID দিন</span><input id="trxBkash" placeholder="বিকাশ TrxID" style="margin-top:8px; padding:9px; width:100%; border:1.5px solid var(--line); border-radius:8px"></label>
-      <label class="pay-opt"><input type="radio" name="pay" value="nagad" style="display:none"><b>নগদ (Send Money)</b><span>${esc(SETTINGS.nagad)} নম্বরে সেন্ড মানি করে TrxID দিন</span><input id="trxNagad" placeholder="নগদ TrxID" style="margin-top:8px; padding:9px; width:100%; border:1.5px solid var(--line); border-radius:8px"></label>
-      <label class="pay-opt"><input type="radio" name="pay" value="card" style="display:none"><b>কার্ড (Visa / Mastercard)</b><span>কার্ড পেমেন্টের জন্য অর্ডার কনফার্মের পর আমাদের প্রতিনিধি যোগাযোগ করবে</span></label>
+      <label class="pay-opt sel"><input type="radio" name="pay" value="cod" checked style="display:none">
+        <b>Cash on Delivery <span class="pay-bn">(ক্যাশ অন ডেলিভারি)</span></b>
+        <span>পণ্য হাতে পেয়ে টাকা দিন — কোনো অগ্রিম পেমেন্ট নয়।</span>
+      </label>
+      <label class="pay-opt"><input type="radio" name="pay" value="bkash" style="display:none">
+        <b>bKash <span class="pay-bn">(বিকাশ)</span></b>
+        <span>ম্যানুয়াল পেমেন্ট — নিচের নম্বরে সেন্ড মানি করে TrxID দিন।</span>
+        <div class="pay-num">বিকাশ (পার্সোনাল): <b>${esc(SETTINGS.bkash)}</b></div>
+        <input class="trx-input" id="trxBkash" placeholder="বিকাশ TrxID লিখুন" style="display:none">
+      </label>
+      <label class="pay-opt"><input type="radio" name="pay" value="nagad" style="display:none">
+        <b>Nagad <span class="pay-bn">(নগদ)</span></b>
+        <span>ম্যানুয়াল পেমেন্ট — নিচের নম্বরে সেন্ড মানি করে TrxID দিন।</span>
+        <div class="pay-num">নগদ (পার্সোনাল): <b>${esc(SETTINGS.nagad)}</b></div>
+        <input class="trx-input" id="trxNagad" placeholder="নগদ TrxID লিখুন" style="display:none">
+      </label>
+      <label class="pay-opt"><input type="radio" name="pay" value="card" style="display:none">
+        <b>Card <span class="pay-bn">(কার্ড)</span></b>
+        <span>ডেলিভারির সময় কার্ডে পেমেন্ট — অর্ডার কনফার্মের পর আমাদের প্রতিনিধি যোগাযোগ করবে।</span>
+      </label>
       <label class="check-row"><input type="checkbox" id="coTerms" required> <span>আমি <a href="#terms" target="_blank">Terms &amp; Conditions</a> ও <a href="#returns" target="_blank">Return Policy</a> পড়েছি ও মেনে নিলাম *</span></label>
       <div class="err" id="coErr"></div>
     </div>
@@ -611,19 +607,6 @@ function startFlashTimer() {
 const _origBind = bindDynamic;
 bindDynamic = function () {
   _origBind();
-  /* hero slider */
-  const hero = $('#heroBox');
-  if (hero) {
-    let cur = 0;
-    const slides = $$('.hero-slide', hero), dots = $$('.hero-dots button', hero);
-    setInterval(() => {
-      if (!document.body.contains(hero)) return;
-      cur = (cur + 1) % slides.length;
-      slides.forEach((s, i) => s.classList.toggle('active', i === cur));
-      dots.forEach((d, i) => d.classList.toggle('on', i === cur));
-    }, 5000);
-    dots.forEach((d, i) => d.addEventListener('click', () => { cur = i; slides.forEach((s, j) => s.classList.toggle('active', j === cur)); dots.forEach((x, j) => x.classList.toggle('on', j === cur)); }));
-  }
   /* newsletter */
   const nl = $('#nlForm');
   if (nl) nl.addEventListener('submit', (e) => { e.preventDefault(); const em = $('#nlEmail').value.trim(); if (!/^\S+@\S+\.\S+$/.test(em)) { toast('সঠিক ইমেইল দিন'); return; } toast('সাবস্ক্রাইব হয়েছে — ধন্যবাদ!'); nl.reset(); });
@@ -655,7 +638,14 @@ bindDynamic = function () {
   const co = $('#coForm');
   if (co) {
     co.addEventListener('submit', placeOrder);
-    $$('input[name="pay"]').forEach((r) => r.addEventListener('change', () => { $$('.pay-opt').forEach((o) => o.classList.toggle('sel', o.querySelector('input').checked)); }));
+    $$('input[name="pay"]').forEach((r) => r.addEventListener('change', () => {
+      $$('.pay-opt').forEach((o) => {
+        const checked = o.querySelector('input').checked;
+        o.classList.toggle('sel', checked);
+        const trx = o.querySelector('.trx-input');
+        if (trx) trx.style.display = checked ? 'block' : 'none';
+      });
+    }));
     $('#coDistrict').addEventListener('change', () => {
       const d = deliveryFor($('#coDistrict').value);
       const sub = cartTotal();

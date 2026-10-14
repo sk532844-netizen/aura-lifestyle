@@ -366,6 +366,7 @@ async function init() {
     LANG = LANG === 'bn' ? 'en' : 'bn';
     localStorage.setItem('aura_lang', LANG);
     applyStaticI18n();
+    if (!isConfigured()) { const dn = $('#demoNote'); if (dn && dn.style.display !== 'none') dn.textContent = t('demoNote'); }
     buildNav(); route();
   });
   $('#cartBtn').addEventListener('click', () => { location.hash = '#cart'; });

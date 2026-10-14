@@ -25,7 +25,10 @@ function saveLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catc
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmt(n) { return '৳' + Number(n || 0).toLocaleString('en-US'); }
 function discount(p) { if (!p.oldPrice || p.oldPrice <= p.price) return 0; return Math.round((p.oldPrice - p.price) / p.oldPrice * 100); }
-function catOf(slug) { return CATEGORIES.find((c) => c.slug === slug) || { slug, bn: slug, en: slug, img: FALLBACK_IMG }; }
+function mainOf(slug) { return (typeof MAIN_CATEGORIES !== 'undefined' ? MAIN_CATEGORIES : []).find((m) => m.slug === slug) || { slug, bn: slug, en: slug, img: FALLBACK_IMG, subs: [] }; }
+function subOf(mainSlug, subSlug) { const m = mainOf(mainSlug); const s = m.subs.find((x) => x.slug === subSlug); return s ? { ...s, main: mainSlug } : { slug: subSlug, bn: subSlug, en: subSlug, main: mainSlug }; }
+function visibleMains() { const hidden = (SETTINGS.hiddenCategories || []); return MAIN_CATEGORIES.filter((m) => !hidden.includes(m.slug)); }
+function prodMainLabel(p) { const m = mainOf(p.main); const s = subOf(p.main, p.sub); return (LANG === 'bn' ? m.bn : m.en) + ' › ' + (LANG === 'bn' ? s.bn : s.en); }
 function prodById(id) { return PRODUCTS.find((p) => p.id === id); }
 function stars(n) { return '★★★★★'.slice(0, Math.round(n)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(n)); }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
@@ -82,8 +85,16 @@ async function init() {
 }
 
 function buildNav() {
-  const links = [['home', t('home')], ['shop', t('shop')], ...CATEGORIES.map((c) => ['shop?cat=' + c.slug, LANG === 'bn' ? c.bn : c.en])];
-  $('#navCats').innerHTML = links.map(([h, label]) => `<a href="#${h}" class="${location.hash.replace('#', '') === h ? 'active' : ''}">${esc(label)}</a>`).join('');
+  const cur = location.hash.replace('#', '');
+  const homeCls = cur === '' || cur.startsWith('home') ? 'active' : '';
+  const shopCls = cur.startsWith('shop') ? 'active' : '';
+  const items = visibleMains().map((m) => {
+    const label = LANG === 'bn' ? m.bn : m.en;
+    const active = cur === 'shop?main=' + m.slug || cur.startsWith('shop?main=' + m.slug + '&') ? 'active' : '';
+    const subs = m.subs.map((s) => `<a href="#shop?main=${m.slug}&sub=${s.slug}">${esc(LANG === 'bn' ? s.bn : s.en)}</a>`).join('');
+    return `<div class="nav-item"><a href="#shop?main=${m.slug}" class="${active}">${esc(label)}</a><div class="mega"><div class="mega-head">${esc(label)}</div>${subs}</div></div>`;
+  }).join('');
+  $('#navCats').innerHTML = `<a href="#home" class="${homeCls}">${t('home')}</a><a href="#shop" class="${shopCls}">${t('shop')}</a>${items}`;
 }
 
 function updateBadges() {
@@ -96,7 +107,7 @@ function onSearchInput(e) {
   const q = e.target.value.trim().toLowerCase();
   const box = $('#suggestBox');
   if (q.length < 2) { box.classList.remove('open'); return; }
-  const hits = PRODUCTS.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + p.cat).toLowerCase().includes(q)).slice(0, 6);
+  const hits = PRODUCTS.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + prodMainLabel(p)).toLowerCase().includes(q)).slice(0, 6);
   if (!hits.length) { box.classList.remove('open'); return; }
   box.innerHTML = hits.map((p) => `<a href="#product/${p.id}"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}</span><span class="s-price">${fmt(p.price)}</span></a>`).join('');
   box.classList.add('open');
@@ -148,6 +159,7 @@ function prodCard(p) {
     ${off > 0 ? `<span class="badge-off">-${off}%</span>` : ''}
     <button class="wish-btn ${wished ? 'on' : ''}" data-wish="${esc(p.id)}" aria-label="wishlist">${wished ? '♥' : '♡'}</button></div>
     <div class="prod-body"><a href="#product/${esc(p.id)}"><h3>${esc(name)}</h3></a>
+    <div class="prod-cat">${esc(prodMainLabel(p))}</div>
     <div class="stars">${stars(4.5)}</div>
     <div class="price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}</div>
     <div class="stock ${stockCls}">${stockTxt}</div>
@@ -162,16 +174,30 @@ function viewHome() {
   const fresh = PRODUCTS.filter((p) => p.tag === 'new').slice(0, 8);
   const featured = PRODUCTS.filter((p) => p.tag === 'featured').slice(0, 4);
   const slides = [
-    { img: 'https://images.unsplash.com/photo-1603252109303-2751441dd157?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'ঈদ কালেকশন ২০২৬ — নতুন পাঞ্জাবি' : 'Eid Collection 2026 — New Panjabi', s: LANG === 'bn' ? '৩০% পর্যন্ত ছাড়, সারা বাংলাদেশে ডেলিভারি' : 'Up to 30% off, delivery across Bangladesh', cta: 'shop?cat=panjabi' },
-    { img: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'স্টাইলিশ স্নিকার্স কালেকশন' : 'Stylish Sneakers Collection', s: LANG === 'bn' ? 'আরাম + স্টাইল, একসাথে' : 'Comfort + style, together', cta: 'shop?cat=sneakers' },
-    { img: 'https://images.unsplash.com/photo-1541643600914-78b084683601?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'প্রিমিয়াম আতর — দীর্ঘস্থায়ী সুগন্ধি' : 'Premium Attar — Long-lasting Fragrance', s: LANG === 'bn' ? 'আসল সুগন্ধি, সেরা দামে' : 'Authentic fragrance at the best price', cta: 'shop?cat=attar' },
+    { img: 'https://images.unsplash.com/photo-1603252109303-2751441dd157?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'ঈদ কালেকশন ২০২৬ — নতুন পাঞ্জাবি' : 'Eid Collection 2026 — New Panjabi', s: LANG === 'bn' ? '৩০% পর্যন্ত ছাড়, সারা বাংলাদেশে ডেলিভারি' : 'Up to 30% off, delivery across Bangladesh', cta: 'shop?main=men&sub=panjabi' },
+    { img: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'স্টাইলিশ স্নিকার্স কালেকশন' : 'Stylish Sneakers Collection', s: LANG === 'bn' ? 'আরাম + স্টাইল, একসাথে' : 'Comfort + style, together', cta: 'shop?main=men&sub=sneakers' },
+    { img: 'https://images.unsplash.com/photo-1541643600914-78b084683601?q=80&w=1600&auto=format&fit=crop', h: LANG === 'bn' ? 'প্রিমিয়াম আতর — দীর্ঘস্থায়ী সুগন্ধি' : 'Premium Attar — Long-lasting Fragrance', s: LANG === 'bn' ? 'আসল সুগন্ধি, সেরা দামে' : 'Authentic fragrance at the best price', cta: 'shop?main=cosmetics&sub=attar' },
   ];
+  const mains = visibleMains();
+  const showcaseMains = mains.filter((m) => ['men', 'women'].includes(m.slug));
   return `
-  <div class="hero" id="heroBox">${slides.map((s, i) => `<div class="hero-slide ${i === 0 ? 'active' : ''}"><img src="${s.img}" alt="" onerror="this.src='${FALLBACK_IMG}'"><div class="hero-overlay"><h1>${esc(s.h)}</h1><p>${esc(s.s)}</p><div><a class="btn" href="#shop?cat=" onclick="event.preventDefault();location.hash='#${s.cta}'">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div></div>`).join('')}
+  <div class="hero" id="heroBox">${slides.map((s, i) => `<div class="hero-slide ${i === 0 ? 'active' : ''}"><img src="${s.img}" alt="" onerror="this.src='${FALLBACK_IMG}'"><div class="hero-overlay"><h1>${esc(s.h)}</h1><p>${esc(s.s)}</p><div><a class="btn" href="#" onclick="event.preventDefault();location.hash='#${s.cta}'">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div></div>`).join('')}
   <div class="hero-dots">${slides.map((_, i) => `<button data-dot="${i}" class="${i === 0 ? 'on' : ''}"></button>`).join('')}</div></div>
 
   <section class="section"><div class="section-head"><h2>${t('categories')}</h2><a href="#shop">${t('viewAll')} →</a></div>
-  <div class="cat-grid">${CATEGORIES.map((c) => `<a class="cat-card" href="#shop?cat=${c.slug}"><img src="${esc(c.img)}" alt="${esc(LANG === 'bn' ? c.bn : c.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span>${esc(LANG === 'bn' ? c.bn : c.en)}</span></a>`).join('')}</div></section>
+  <div class="main-cat-grid">${mains.map((m) => {
+    const count = PRODUCTS.filter((p) => p.main === m.slug && p.stock >= 0).length;
+    const subNames = m.subs.slice(0, 3).map((s) => LANG === 'bn' ? s.bn : s.en).join(' • ');
+    return `<a class="main-cat-card" href="#shop?main=${m.slug}"><img src="${esc(m.img)}" alt="${esc(LANG === 'bn' ? m.bn : m.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span class="mc-name">${esc(LANG === 'bn' ? m.bn : m.en)}</span><span class="mc-subs">${esc(subNames)}</span><span class="mc-count">${count} ${LANG === 'bn' ? 'টি প্রোডাক্ট' : 'products'}</span></a>`;
+  }).join('')}</div></section>
+
+  ${showcaseMains.map((m) => {
+    const rows = PRODUCTS.filter((p) => p.main === m.slug && p.stock > 0).slice(0, 4);
+    if (!rows.length) return '';
+    return `<section class="section"><div class="section-head"><h2>${esc(LANG === 'bn' ? m.bn : m.en)}</h2><a href="#shop?main=${m.slug}">${t('viewAll')} →</a></div>
+    <div class="cat-showcase"><div class="cs-banner"><img src="${esc(m.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><div class="cs-overlay"><h3>${esc(LANG === 'bn' ? m.bn : m.en)}</h3><p>${m.subs.map((s) => LANG === 'bn' ? s.bn : s.en).join(' • ')}</p><a class="btn" href="#shop?main=${m.slug}">${LANG === 'bn' ? 'সব দেখুন' : 'View All'}</a></div></div>
+    <div class="prod-row">${rows.map(prodCard).join('')}</div></div></section>`;
+  }).join('')}
 
   ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:16px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
 
@@ -199,13 +225,15 @@ function viewHome() {
 
 /* ---------------- SHOP ---------------- */
 function viewShop(params) {
-  const cat = params.get('cat') || '';
+  const main = params.get('main') || '';
+  const sub = params.get('sub') || '';
   const q = (params.get('q') || '').toLowerCase();
   const sort = params.get('sort') || 'popular';
   const maxPrice = parseInt(params.get('max') || '0', 10);
   let list = PRODUCTS.filter((p) => p.stock >= 0);
-  if (cat) list = list.filter((p) => p.cat === cat);
-  if (q) list = list.filter((p) => (p.nameEn + ' ' + p.nameBn).toLowerCase().includes(q));
+  if (main) list = list.filter((p) => p.main === main);
+  if (sub) list = list.filter((p) => p.sub === sub);
+  if (q) list = list.filter((p) => (p.nameEn + ' ' + p.nameBn + ' ' + prodMainLabel(p)).toLowerCase().includes(q));
   if (maxPrice > 0) list = list.filter((p) => p.price <= maxPrice);
   if (sort === 'low') list = [...list].sort((a, b) => a.price - b.price);
   else if (sort === 'high') list = [...list].sort((a, b) => b.price - a.price);
@@ -213,17 +241,29 @@ function viewShop(params) {
   const page = Math.max(1, parseInt(params.get('page') || '1', 10));
   const PER = 12, pages = Math.max(1, Math.ceil(list.length / PER));
   const slice = list.slice((page - 1) * PER, page * PER);
-  const base = `#shop?${cat ? 'cat=' + cat + '&' : ''}${q ? 'q=' + encodeURIComponent(q) + '&' : ''}${maxPrice ? 'max=' + maxPrice + '&' : ''}sort=${sort}`;
-  return `<section class="section"><h2 style="color:var(--navy)">${cat ? esc(LANG === 'bn' ? catOf(cat).bn : catOf(cat).en) : (q ? `Search: "${esc(q)}"` : t('shop'))}</h2>
+  const base = `#shop?${main ? 'main=' + main + '&' : ''}${sub ? 'sub=' + sub + '&' : ''}${q ? 'q=' + encodeURIComponent(q) + '&' : ''}${maxPrice ? 'max=' + maxPrice + '&' : ''}sort=${sort}`;
+  const mainLabel = main ? (LANG === 'bn' ? mainOf(main).bn : mainOf(main).en) : '';
+  const subLabel = (main && sub) ? (LANG === 'bn' ? subOf(main, sub).bn : subOf(main, sub).en) : '';
+  const heading = main ? (sub ? `${mainLabel} › ${subLabel}` : mainLabel) : (q ? `Search: "${esc(q)}"` : t('shop'));
+  const mains = visibleMains();
+  const subs = main ? mainOf(main).subs : [];
+  return `<section class="section"><div class="crumb"><a href="#home">${t('home')}</a> › <a href="#shop">${t('shop')}</a>${main ? ` › <a href="#shop?main=${main}">${esc(mainLabel)}</a>` : ''}${sub ? ` › <span>${esc(subLabel)}</span>` : ''}</div>
+  <h2 style="color:var(--navy)">${esc(heading)}</h2>
   <div class="filters" style="margin-top:14px">
     <select id="fSort"><option value="popular" ${sort === 'popular' ? 'selected' : ''}>সবচেয়ে জনপ্রিয়</option><option value="low" ${sort === 'low' ? 'selected' : ''}>দাম: কম → বেশি</option><option value="high" ${sort === 'high' ? 'selected' : ''}>দাম: বেশি → কম</option><option value="new" ${sort === 'new' ? 'selected' : ''}>নতুন আগে</option></select>
     <select id="fMax"><option value="0">সব দাম</option><option value="1000" ${maxPrice === 1000 ? 'selected' : ''}>৳১০০০-এর নিচে</option><option value="2000" ${maxPrice === 2000 ? 'selected' : ''}>৳২০০০-এর নিচে</option><option value="3000" ${maxPrice === 3000 ? 'selected' : ''}>৳৩০০০-এর নিচে</option></select>
     <input id="fQ" placeholder="এই পেজে খুঁজুন..." value="${esc(q)}">
   </div>
-  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px">
-    <button class="chip ${!cat ? 'on' : ''}" onclick="location.hash='#shop'">সব</button>
-    ${CATEGORIES.map((c) => `<button class="chip ${cat === c.slug ? 'on' : ''}" onclick="location.hash='#shop?cat=${c.slug}'">${esc(LANG === 'bn' ? c.bn : c.en)}</button>`).join('')}
+  <div class="filter-label">${LANG === 'bn' ? 'ক্যাটাগরি' : 'Category'}</div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+    <button class="chip ${!main ? 'on' : ''}" onclick="location.hash='#shop'">সব</button>
+    ${mains.map((m) => `<button class="chip ${main === m.slug ? 'on' : ''}" onclick="location.hash='#shop?main=${m.slug}'">${esc(LANG === 'bn' ? m.bn : m.en)}</button>`).join('')}
   </div>
+  ${main ? `<div class="filter-label">${esc(mainLabel)} — ${LANG === 'bn' ? 'সাব-ক্যাটাগরি' : 'Sub-category'}</div>
+  <div class="sub-chips">
+    <button class="chip sub-chip ${!sub ? 'on' : ''}" onclick="location.hash='#shop?main=${main}'">${LANG === 'bn' ? 'সব' : 'All'}</button>
+    ${subs.map((s) => `<button class="chip sub-chip ${sub === s.slug ? 'on' : ''}" onclick="location.hash='#shop?main=${main}&sub=${s.slug}'">${esc(LANG === 'bn' ? s.bn : s.en)}</button>`).join('')}
+  </div>` : ''}
   <p class="result-count">${list.length}টি প্রোডাক্ট পাওয়া গেছে</p>
   ${slice.length ? `<div class="prod-row">${slice.map(prodCard).join('')}</div>` : `<div class="empty"><h3>কোনো প্রোডাক্ট পাওয়া যায়নি</h3><p>অন্য ক্যাটাগরি বা দাম দিয়ে চেষ্টা করুন।</p></div>`}
   ${pages > 1 ? `<div class="pager">${Array.from({ length: pages }, (_, i) => `<button class="${page === i + 1 ? 'on' : ''}" onclick="location.hash='${base}&page=${i + 1}'">${i + 1}</button>`).join('')}</div>` : ''}
@@ -237,12 +277,13 @@ function viewProduct(id) {
   const name = LANG === 'bn' ? p.nameBn : p.nameEn;
   const desc = LANG === 'bn' ? p.descBn : p.descEn;
   const off = discount(p);
-  const related = PRODUCTS.filter((x) => x.cat === p.cat && x.id !== p.id).slice(0, 4);
+  const related = [...PRODUCTS.filter((x) => x.main === p.main && x.sub === p.sub && x.id !== p.id),
+    ...PRODUCTS.filter((x) => x.main === p.main && x.sub !== p.sub && x.id !== p.id)].slice(0, 4);
   const seedRv = seedReviews[p.id] || [];
-  return `<section class="section"><div class="pd">
+  return `<section class="section"><div class="crumb"><a href="#home">${t('home')}</a> › <a href="#shop">${t('shop')}</a> › <a href="#shop?main=${p.main}">${esc(LANG === 'bn' ? mainOf(p.main).bn : mainOf(p.main).en)}</a> › <a href="#shop?main=${p.main}&sub=${p.sub}">${esc(LANG === 'bn' ? subOf(p.main, p.sub).bn : subOf(p.main, p.sub).en)}</a> › <span>${esc(name)}</span></div><div class="pd">
     <div><img class="main" src="${esc(p.img)}" alt="${esc(name)}" onerror="this.src='${FALLBACK_IMG}'"></div>
     <div>
-      <span style="color:var(--muted); font-size:13px">${esc(LANG === 'bn' ? catOf(p.cat).bn : catOf(p.cat).en)}</span>
+      <span style="color:var(--muted); font-size:13px">${esc(prodMainLabel(p))}</span>
       <h1>${esc(name)}</h1>
       <div class="stars">${stars(4.5)} <span style="color:var(--muted); font-size:13px">(4.5)</span></div>
       <div class="pd-price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}${off > 0 ? ` <span style="color:var(--red); font-weight:700">-${off}% ছাড়</span>` : ''}</div>

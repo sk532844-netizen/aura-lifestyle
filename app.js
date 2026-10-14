@@ -139,7 +139,7 @@ function route() {
   else if (path === 'terms') app.innerHTML = viewTerms();
   else if (path === 'about') app.innerHTML = viewAbout();
   else if (path.startsWith('order-success/')) app.innerHTML = viewOrderSuccess(path.split('/')[1]);
-  else app.innerHTML = viewHome();
+  else app.innerHTML = view404();
   bindDynamic();
 }
 
@@ -147,7 +147,13 @@ function route() {
 function bindDynamic() {
   $$('[data-add]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); addToCart(b.dataset.add, 1, null); }));
   $$('[data-wish]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); toggleWish(b.dataset.wish); }));
-  $$('.faq-q').forEach((q) => q.addEventListener('click', () => q.parentElement.classList.toggle('open')));
+  $$('.faq-q').forEach((q) => {
+    q.addEventListener('click', () => {
+      const item = q.parentElement;
+      item.classList.toggle('open');
+      q.setAttribute('aria-expanded', item.classList.contains('open') ? 'true' : 'false');
+    });
+  });
 }
 
 /* ---------------- product card ---------------- */
@@ -168,6 +174,11 @@ function prodCard(p) {
     <div class="stock ${stockCls}">${stockTxt}</div>
     <button class="add-btn" data-add="${esc(p.id)}" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button></div>
   </article>`;
+}
+
+/* ---------------- 404 ---------------- */
+function view404() {
+  return `<section class="section"><div class="empty"><h3>পেজ পাওয়া যায়নি (404)</h3><p>আপনি যে ঠিকানায় গিয়েছিলেন সেটি খুঁজে পাওয়া যায়নি।</p><div style="display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap"><a class="btn" href="#home">হোমে ফিরুন</a><a class="btn btn-outline" href="#shop">Shop করুন</a></div></div></section>`;
 }
 
 /* ---------------- HOME (compact) ---------------- */
@@ -353,7 +364,7 @@ function viewCheckout() {
   const sub = cartTotal();
   return `<section class="section"><h2 style="color:var(--navy)">Checkout</h2>
   <form id="coForm" class="cart-layout" style="margin-top:16px"><div>
-    <div class="card"><h3>Billing Details</h3>
+    <div class="card"><h3>বিলিং তথ্য</h3>
       <div class="field"><label>পূর্ণ নাম *</label><input id="coName" required placeholder="আপনার নাম"></div>
       <div class="field"><label>মোবাইল নম্বর * (১১ ডিজিট)</label><input id="coPhone" required placeholder="01XXXXXXXXX" inputmode="numeric"><div class="hint">অর্ডার কনফার্মেশনের জন্য এই নম্বরে কল করা হবে</div></div>
       <div class="field"><label>জেলা *</label><select id="coDistrict" required><option value="">জেলা নির্বাচন করুন</option>${DISTRICTS.map((d) => `<option>${esc(d)}</option>`).join('')}</select></div>
@@ -362,24 +373,24 @@ function viewCheckout() {
       <div class="field"><label>WhatsApp নম্বর (ঐচ্ছিক)</label><input id="coWhats" placeholder="01XXXXXXXXX"></div>
       <div class="field"><label>অর্ডার নোট (ঐচ্ছিক)</label><textarea id="coNote" rows="2" placeholder="ডেলিভারি সংক্রান্ত কোনো নির্দেশনা"></textarea></div>
     </div>
-    <div class="card" style="margin-top:16px"><h3>Payment Method</h3>
-      <label class="pay-opt sel"><input type="radio" name="pay" value="cod" checked style="display:none">
+    <div class="card" style="margin-top:16px"><h3>পেমেন্ট মেথড</h3>
+      <label class="pay-opt sel"><input type="radio" name="pay" value="cod" checked class="pay-radio">
         <b>Cash on Delivery <span class="pay-bn">(ক্যাশ অন ডেলিভারি)</span></b>
         <span>পণ্য হাতে পেয়ে টাকা দিন — কোনো অগ্রিম পেমেন্ট নয়।</span>
       </label>
-      <label class="pay-opt"><input type="radio" name="pay" value="bkash" style="display:none">
+      <label class="pay-opt"><input type="radio" name="pay" value="bkash" class="pay-radio">
         <b>bKash <span class="pay-bn">(বিকাশ)</span></b>
         <span>ম্যানুয়াল পেমেন্ট — নিচের নম্বরে সেন্ড মানি করে TrxID দিন।</span>
         <div class="pay-num">বিকাশ (পার্সোনাল): <b>${esc(SETTINGS.bkash)}</b></div>
         <input class="trx-input" id="trxBkash" placeholder="বিকাশ TrxID লিখুন" style="display:none">
       </label>
-      <label class="pay-opt"><input type="radio" name="pay" value="nagad" style="display:none">
+      <label class="pay-opt"><input type="radio" name="pay" value="nagad" class="pay-radio">
         <b>Nagad <span class="pay-bn">(নগদ)</span></b>
         <span>ম্যানুয়াল পেমেন্ট — নিচের নম্বরে সেন্ড মানি করে TrxID দিন।</span>
         <div class="pay-num">নগদ (পার্সোনাল): <b>${esc(SETTINGS.nagad)}</b></div>
         <input class="trx-input" id="trxNagad" placeholder="নগদ TrxID লিখুন" style="display:none">
       </label>
-      <label class="pay-opt"><input type="radio" name="pay" value="card" style="display:none">
+      <label class="pay-opt"><input type="radio" name="pay" value="card" class="pay-radio">
         <b>Card <span class="pay-bn">(কার্ড)</span></b>
         <span>ডেলিভারির সময় কার্ডে পেমেন্ট — অর্ডার কনফার্মের পর আমাদের প্রতিনিধি যোগাযোগ করবে।</span>
       </label>
@@ -387,7 +398,7 @@ function viewCheckout() {
       <div class="err" id="coErr"></div>
     </div>
   </div><div class="card">
-    <h3>Product Details</h3>
+    <h3>অর্ডারের পণ্য</h3>
     ${cart.map((i) => { const p = prodById(i.id); if (!p) return ''; return `<div class="tot-row"><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)} × ${i.qty}</span><b>${fmt(p.price * i.qty)}</b></div>`; }).join('')}
     <div class="tot-row"><span>Subtotal</span><b>${fmt(sub)}</b></div>
     <div class="tot-row"><span>Delivery</span><b id="coDel">জেলা নির্বাচন করুন</b></div>
@@ -399,6 +410,8 @@ function viewCheckout() {
 
 async function placeOrder(e) {
   e.preventDefault();
+  const btn = $('#coForm button[type="submit"]');
+  if (!btn || btn.disabled) return; /* already submitting — block duplicates */
   const name = $('#coName').value.trim();
   const phone = $('#coPhone').value.trim();
   const district = $('#coDistrict').value;
@@ -416,33 +429,52 @@ async function placeOrder(e) {
     err.textContent = 'পেমেন্টের TrxID দিন।'; return;
   }
   err.textContent = '';
-  const sub = cartTotal();
-  const del = deliveryFor(district);
-  const total = sub + del;
-  const orderId = 'AL-' + Math.floor(100000 + Math.random() * 900000);
-  const order = {
-    orderId, name, phone, district, address, email, whats, note, pay,
-    trxId: pay === 'bkash' ? $('#trxBkash').value.trim() : (pay === 'nagad' ? $('#trxNagad').value.trim() : ''),
-    items: cart.map((i) => ({ id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id })),
-    subtotal: sub, delivery: del, total, stage: 'pending', courier: '', trackingNumber: '', dispatchDate: '',
-    createdAt: new Date().toISOString(),
-  };
-  const remoteId = await saveOrder(order);
-  if (!remoteId) { localOrders.push(order); saveLS('aura_orders_local', localOrders); }
-  cart = [];
-  saveLS('aura_cart', cart);
-  updateBadges();
-  location.hash = '#order-success/' + orderId;
-  saveLS('aura_last_order', order);
+  btn.disabled = true;
+  const btnLabel = btn.innerHTML;
+  btn.innerHTML = 'অর্ডার প্রসেস হচ্ছে… ⏳';
+  try {
+    const sub = cartTotal();
+    const del = deliveryFor(district);
+    const total = sub + del;
+    const orderId = 'AL-' + Math.floor(100000 + Math.random() * 900000);
+    const order = {
+      orderId, name, phone, district, address, email, whats, note, pay,
+      trxId: pay === 'bkash' ? $('#trxBkash').value.trim() : (pay === 'nagad' ? $('#trxNagad').value.trim() : ''),
+      items: cart.map((i) => ({ id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id })),
+      subtotal: sub, delivery: del, total, stage: 'pending', courier: '', trackingNumber: '', dispatchDate: '',
+      createdAt: new Date().toISOString(),
+    };
+    const remoteId = await saveOrder(order);
+    if (!remoteId) { localOrders.push(order); saveLS('aura_orders_local', localOrders); }
+    cart = [];
+    saveLS('aura_cart', cart);
+    updateBadges();
+    saveLS('aura_last_order', order);
+    location.hash = '#order-success/' + orderId;
+  } catch (ex) {
+    err.textContent = 'অর্ডার সেভ করা যায়নি। আবার চেষ্টা করুন।';
+    btn.disabled = false;
+    btn.innerHTML = btnLabel;
+  }
 }
 
 function viewOrderSuccess(orderId) {
   const o = loadLS('aura_last_order', null);
-  return `<section class="section"><div class="card" style="max-width:640px; margin:0 auto; text-align:center">
-    <h2 style="color:var(--green)">অর্ডার সফল হয়েছে!</h2>
-    <p style="margin:12px 0">আপনার অর্ডার আইডি: <b style="font-size:22px; color:var(--navy)">${esc(orderId)}</b></p>
-    <p>মোট: <b>${o ? fmt(o.total) : ''}</b> • পেমেন্ট: <b>${o ? esc(o.pay.toUpperCase()) : ''}</b></p>
-    <p style="color:var(--muted); font-size:14px; margin-top:8px">অর্ডার কনফার্মের জন্য আমাদের প্রতিনিধি আপনার নম্বরে কল করবে। এই অর্ডার আইডিটি সংরক্ষণ করুন।</p>
+  const order = (o && o.orderId === orderId) ? o : (localOrders.find((x) => x.orderId === orderId) || null);
+  if (!order) return `<section class="section"><div class="empty"><h3>অর্ডার খুঁজে পাওয়া যায়নি</h3><p>অর্ডার আইডি: <b>${esc(orderId)}</b></p><div style="display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap"><a class="btn" href="#home">হোমে ফিরুন</a><a class="btn btn-outline" href="#shop">Shop করুন</a></div></div></section>`;
+  const payLabel = { cod: 'Cash on Delivery (ক্যাশ অন ডেলিভারি)', bkash: 'bKash (বিকাশ)', nagad: 'Nagad (নগদ)', card: 'Card (কার্ড)' }[(order.pay || '').toLowerCase()] || esc(order.pay || '');
+  return `<section class="section"><div class="card" style="max-width:680px; margin:0 auto">
+    <h2 style="color:var(--green); text-align:center">অর্ডার সফল হয়েছে!</h2>
+    <p style="text-align:center; margin:10px 0">আপনার অর্ডার আইডি: <b style="font-size:22px; color:var(--navy)">${esc(orderId)}</b></p>
+    <h3 style="margin:16px 0 6px; color:var(--navy)">অর্ডারের পণ্য</h3>
+    ${(order.items || []).map((i) => `<div class="tot-row"><span>${esc(i.name)} × ${i.qty}${i.size ? ' (Size: ' + esc(i.size) + ')' : ''}</span><b>${fmt(i.price * i.qty)}</b></div>`).join('')}
+    <div class="tot-row"><span>Subtotal</span><b>${fmt(order.subtotal)}</b></div>
+    <div class="tot-row"><span>Delivery</span><b>${fmt(order.delivery)}</b></div>
+    <div class="tot-row grand"><span>Total</span><b>${fmt(order.total)}</b></div>
+    <h3 style="margin:16px 0 6px; color:var(--navy)">ডেলিভারি তথ্য</h3>
+    <p style="font-size:14px">${esc(order.name)} • ${esc(order.phone)}<br>${esc(order.district)}<br>${esc(order.address)}</p>
+    <p style="font-size:14px; margin-top:6px">পেমেন্ট: <b>${payLabel}</b></p>
+    <p style="color:var(--muted); font-size:14px; margin-top:10px">অর্ডার কনফার্মের জন্য আমাদের প্রতিনিধি আপনার নম্বরে কল করবে। এই অর্ডার আইডিটি সংরক্ষণ করুন।</p>
     <div style="display:flex; gap:10px; justify-content:center; margin-top:16px; flex-wrap:wrap"><a class="btn" href="#track">Track Order</a><a class="btn btn-outline" href="#shop">Continue Shopping</a></div>
   </div></section>`;
 }
@@ -538,7 +570,7 @@ async function loadReviews(productId) {
 
 /* ================= INFO PAGES ================= */
 function viewFaq() {
-  return `<section class="section"><div class="info-page"><h1>সাধারণ প্রশ্ন (FAQ)</h1>${SEED_FAQS.map((f) => `<div class="faq-item"><div class="faq-q">${esc(f.q)} <span>+</span></div><div class="faq-a">${esc(f.a)}</div></div>`).join('')}</div></section>`;
+  return `<section class="section"><div class="info-page"><h1>সাধারণ প্রশ্ন (FAQ)</h1>${SEED_FAQS.map((f) => `<div class="faq-item"><button class="faq-q" type="button" aria-expanded="false">${esc(f.q)} <span>+</span></button><div class="faq-a">${esc(f.a)}</div></div>`).join('')}</div></section>`;
 }
 function viewContact() {
   return `<section class="section"><div class="info-page"><h1>Contact Us</h1>

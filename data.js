@@ -44,7 +44,7 @@ const MAIN_CATEGORIES = [
     { slug: 'powerbank', bn: 'পাওয়ার ব্যাংক', en: 'Power Bank' },
     { slug: 'charger', bn: 'চার্জার ও কেবল', en: 'Charger & Cable' },
   ] },
-  { slug: 'islamic', bn: 'ইসলামিক', en: 'Islamic', img: U('photo-1548625149-fc4a29cf7092'), subs: [
+  { slug: 'islamic', bn: 'ইসলামিক', en: 'Islamic', img: U('photo-1519817650390-64a93db51149'), subs: [
     { slug: 'thobe', bn: 'থোব', en: 'Thobe' },
     { slug: 'tupi', bn: 'টুপি', en: 'Tupi' },
     { slug: 'tasbih', bn: 'তাসবিহ', en: 'Tasbih' },
@@ -117,7 +117,7 @@ const SEED_PRODUCTS = [
   { id: 'p19', sku: 'A100019', nameBn: 'জামদানি শাড়ি', nameEn: 'Jamdani Saree', main: 'women', sub: 'saree', price: 3490, oldPrice: 4500, img: U('photo-1610030469983-98e550d6193c'), descBn: 'ঐতিহ্যবাহী হাতে বোনা জামদানি শাড়ি, উৎসবের জন্য সেরা।', descEn: 'Traditional hand-woven Jamdani saree, best for festivals.', sizes: ['Free Size'], stock: 10, tag: 'featured' },
   { id: 'p20', sku: 'A100020', nameBn: 'কটন কুর্তি', nameEn: 'Cotton Kurti', main: 'women', sub: 'kurti', price: 1250, oldPrice: 1650, img: U('photo-1594633312681-425c7b97ccd1'), descBn: 'নরম কটন কুর্তি, প্রতিদিনের জন্য আরামদায়ক।', descEn: 'Soft cotton kurti, comfortable for everyday wear.', sizes: ['S', 'M', 'L', 'XL'], stock: 28, tag: 'best-seller' },
   { id: 'p21', sku: 'A100021', nameBn: 'প্রিমিয়াম থ্রি-পিস', nameEn: 'Premium Three-Piece', main: 'women', sub: 'threepiece', price: 2190, oldPrice: 2890, img: U('photo-1515886657613-9f3515b0c78f'), descBn: 'কামিজ, সালোয়ার ও ওড়নার সম্পূর্ণ সেট, সুন্দর প্রিন্ট।', descEn: 'Complete kameez, salwar and dupatta set with beautiful print.', sizes: ['S', 'M', 'L', 'XL'], stock: 16, tag: 'new' },
-  { id: 'p22', sku: 'A100022', nameBn: 'প্রিমিয়াম হিজাব', nameEn: 'Premium Hijab', main: 'women', sub: 'hijab', price: 550, oldPrice: 750, img: U('photo-1589310243389-96a5483213ff'), descBn: 'নরম জর্জেট ফেব্রিকের হিজাব, সারাদিন আরামদায়ক।', descEn: 'Soft georgette hijab, comfortable all day.', sizes: ['Free Size'], stock: 50, tag: '' },
+  { id: 'p22', sku: 'A100022', nameBn: 'প্রিমিয়াম হিজাব', nameEn: 'Premium Hijab', main: 'women', sub: 'hijab', price: 550, oldPrice: 750, img: U('photo-1693985007521-e08e64770947'), descBn: 'নরম জর্জেট ফেব্রিকের হিজাব, সারাদিন আরামদায়ক।', descEn: 'Soft georgette hijab, comfortable all day.', sizes: ['Free Size'], stock: 50, tag: '' },
   { id: 'p23', sku: 'A100023', nameBn: 'ওমেনস ব্লক হিল', nameEn: "Women's Block Heel", main: 'women', sub: 'womens-shoes', price: 1650, oldPrice: 2200, img: U('photo-1543163521-1bf539c55dd2'), descBn: 'স্টাইলিশ ও আরামদায়ক ব্লক হিল, অনুষ্ঠানের জন্য।', descEn: 'Stylish comfortable block heel, perfect for occasions.', sizes: ['36', '37', '38', '39', '40'], stock: 14, tag: 'new' },
   /* ---- NEW: Home Textiles ---- */
   { id: 'p24', sku: 'A100024', nameBn: 'প্রিমিয়াম কটন বেডশিট', nameEn: 'Premium Cotton Bedsheet', main: 'home', sub: 'bedsheet', price: 1450, oldPrice: 1950, img: U('photo-1522771739844-6a9f6d5f14af'), descBn: 'নরম কটন বেডশিট, ২টি পিলো কভার সহ।', descEn: 'Soft cotton bedsheet with 2 pillow covers.', sizes: ['King'], stock: 20, tag: 'best-seller' },
@@ -125,7 +125,7 @@ const SEED_PRODUCTS = [
   /* ---- NEW: Islamic ---- */
   { id: 'p26', sku: 'A100026', nameBn: 'সাদা প্রিমিয়াম থোব', nameEn: 'White Premium Thobe', main: 'islamic', sub: 'thobe', price: 2250, oldPrice: 2950, img: U('photo-1610652492500-ded49ceeb378'), descBn: 'সাদা প্রিমিয়াম থোব, নামাজ ও অনুষ্ঠানের জন্য।', descEn: 'White premium thobe for prayer and occasions.', sizes: ['M', 'L', 'XL', 'XXL'], stock: 18, tag: 'featured' },
   { id: 'p27', sku: 'A100027', nameBn: 'নামাজের টুপি (প্যাক অফ ২)', nameEn: 'Prayer Cap Tupi (Pack of 2)', main: 'islamic', sub: 'tupi', price: 350, oldPrice: 500, img: U('photo-1521369909029-2afed882baee'), descBn: 'আরামদায়ক কটন নামাজের টুপি, ২টির প্যাক।', descEn: 'Comfortable cotton prayer cap, pack of 2.', sizes: ['Free Size'], stock: 60, tag: '' },
-  { id: 'p28', sku: 'A100028', nameBn: 'কাঠের তাসবিহ', nameEn: 'Wooden Tasbih', main: 'islamic', sub: 'tasbih', price: 450, oldPrice: 600, img: U('photo-1548625149-fc4a29cf7092'), descBn: 'হাতে তৈরি কাঠের তাসবিহ, ১০০ দানা।', descEn: 'Handcrafted wooden tasbih, 100 beads.', sizes: ['100 Beads'], stock: 30, tag: '' },
+  { id: 'p28', sku: 'A100028', nameBn: 'কাঠের তাসবিহ', nameEn: 'Wooden Tasbih', main: 'islamic', sub: 'tasbih', price: 450, oldPrice: 600, img: U('photo-1564769625905-50e93615e769'), descBn: 'হাতে তৈরি কাঠের তাসবিহ, ১০০ দানা।', descEn: 'Handcrafted wooden tasbih, 100 beads.', sizes: ['100 Beads'], stock: 30, tag: '' },
   /* ---- NEW: Accessories ---- */
   { id: 'p29', sku: 'A100029', nameBn: 'ক্লাসিক অ্যানালগ ঘড়ি', nameEn: 'Classic Analog Watch', main: 'accessories', sub: 'watch', price: 2850, oldPrice: 3800, img: U('photo-1523275335684-37898b6baf30'), descBn: 'স্টাইলিশ অ্যানালগ ঘড়ি, লেদার স্ট্র্যাপ সহ।', descEn: 'Stylish analog watch with leather strap.', sizes: ['Free Size'], stock: 15, tag: 'best-seller' },
   { id: 'p30', sku: 'A100030', nameBn: 'লেদার ওয়ালেট', nameEn: 'Leather Wallet', main: 'accessories', sub: 'wallet', price: 950, oldPrice: 1300, img: U('photo-1627123424574-724758594e93'), descBn: 'আসল লেদারের স্লিম ওয়ালেট, একাধিক কার্ড স্লট সহ।', descEn: 'Genuine leather slim wallet with multiple card slots.', sizes: ['Free Size'], stock: 40, tag: '' },

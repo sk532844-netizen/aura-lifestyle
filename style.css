@@ -201,7 +201,9 @@ img { max-width: 100%; display: block; }
 .field input, .field select, .field textarea { width: 100%; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; font-family: inherit; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold); outline: none; }
 .field .hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.pay-opt { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; }
+.pay-opt { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; position: relative; }
+.pay-opt .pay-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pay-opt:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
 .pay-opt.sel { border-color: var(--gold); background: #fdf8e7; }
 .pay-opt b { display: block; font-size: 16px; color: var(--navy); }
 .pay-opt .pay-bn { font-weight: 600; font-size: 14px; color: var(--muted); }
@@ -234,7 +236,7 @@ img { max-width: 100%; display: block; }
 .info-page p, .info-page li { color: #444; margin-bottom: 10px; }
 .info-page ul { padding-left: 20px; }
 .faq-item { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-.faq-q { padding: 14px 16px; font-weight: 700; color: var(--navy); cursor: pointer; display: flex; justify-content: space-between; }
+.faq-q { padding: 14px 16px; font-weight: 700; color: var(--navy); cursor: pointer; display: flex; justify-content: space-between; width: 100%; background: none; border: none; text-align: left; font-size: inherit; font-family: inherit; }
 .faq-a { padding: 0 16px 14px; color: #444; display: none; }
 .faq-item.open .faq-a { display: block; }
 .newsletter { background: var(--navy); color: #fff; border-radius: 16px; padding: 20px; text-align: center; margin: 22px 0; }

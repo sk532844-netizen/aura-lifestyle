@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>অ্যাডমিন প্যানেল — AURA LIFESTYLE</title>
+<link rel="stylesheet" href="admin.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen" class="login-wrap" hidden>
+  <div class="login-card">
+    <div class="login-brand">
+      <img src="logo.jpg" alt="AURA" onerror="this.style.display='none'">
+      <div><b>AURA LIFESTYLE</b><span>অ্যাডমিন প্যানেল</span></div>
+    </div>
+    <div id="demoSetup" class="setup-note" hidden>
+      <b>Firebase এখনো কানেক্ট হয়নি</b>
+      <p>অ্যাডমিন প্যানেল চালাতে Firebase কানেক্ট করতে হবে। ধাপগুলো <b>ADMIN_SETUP.md</b> ফাইলে আছে:</p>
+      <ol>
+        <li>Firebase Console-এ প্রজেক্ট বানান</li>
+        <li>Email/Password লগইন চালু করে admin user বানান</li>
+        <li>Firestore তৈরি করুন (asia-south1)</li>
+        <li>firebase.js-এ config + firestore.rules-এ UID বসান</li>
+      </ol>
+    </div>
+    <form id="loginForm">
+      <label>ইমেইল<input type="email" id="loginEmail" required autocomplete="username" placeholder="admin@example.com"></label>
+      <label>পাসওয়ার্ড<input type="password" id="loginPass" required autocomplete="current-password" placeholder="••••••••"></label>
+      <div class="err" id="loginErr"></div>
+      <button class="btn btn-block" type="submit" id="loginBtn">লগইন</button>
+      <button class="link-btn" type="button" id="forgotBtn">পাসওয়ার্ড ভুলে গেছেন?</button>
+    </form>
+    <p class="login-hint">অ্যাডমিন user Firebase Console → Authentication-এ বানাতে হয়। এই পেজে কোনো পাসওয়ার্ড সেভ করা নেই।</p>
+  </div>
+</div>
+
+<!-- ============ PANEL ============ -->
+<div id="panel" hidden>
+  <header class="a-header">
+    <div class="a-brand">
+      <img src="logo.jpg" alt="AURA" onerror="this.style.display='none'">
+      <div><b>AURA LIFESTYLE</b><span>অ্যাডমিন প্যানেল</span></div>
+    </div>
+    <div class="a-user">
+      <span id="adminEmail"></span>
+      <button class="btn btn-outline btn-sm" id="logoutBtn">লগআউট</button>
+    </div>
+  </header>
+
+  <nav class="a-tabs" id="tabs">
+    <button data-tab="dashboard" class="on">ড্যাশবোর্ড</button>
+    <button data-tab="products">প্রোডাক্ট</button>
+    <button data-tab="categories">ক্যাটাগরি</button>
+    <button data-tab="orders">অর্ডার <span class="tab-badge" id="ordersBadge" hidden></span></button>
+    <button data-tab="reviews">রিভিউ</button>
+    <button data-tab="newsletter">নিউজলেটার</button>
+    <button data-tab="settings">সেটিংস</button>
+  </nav>
+
+  <main class="a-main">
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="tab-page">
+      <div class="stat-grid" id="statGrid"></div>
+      <h3>সাম্প্রতিক অর্ডার</h3>
+      <div id="recentOrders" class="order-list"></div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="tab-products" class="tab-page" hidden>
+      <div class="row-between">
+        <input id="prodSearch" class="search" placeholder="প্রোডাক্ট খুঁজুন (নাম / SKU)...">
+        <button class="btn" id="addProdBtn">+ নতুন প্রোডাক্ট</button>
+      </div>
+      <div id="seedImportBox" class="setup-note" hidden>
+        <b>Firestore-এ কোনো প্রোডাক্ট নেই</b>
+        <p>সাইটের ৫৫টি seed প্রোডাক্ট Firestore-এ আপলোড করুন — নইলে ওয়েবসাইটে প্রোডাক্ট দেখাবে না।</p>
+        <button class="btn" id="seedImportBtn">৫৫টি প্রোডাক্ট আপলোড করুন</button>
+      </div>
+      <div class="table-wrap"><table class="a-table" id="prodTable">
+        <thead><tr><th>ছবি</th><th>নাম / SKU</th><th>দাম</th><th>স্টক</th><th>দৃশ্যমান</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+
+      <div id="prodForm" class="card form-card" hidden>
+        <h3 id="prodFormTitle">নতুন প্রোডাক্ট</h3>
+        <div class="form-grid">
+          <label>বাংলা নাম *<input id="pfNameBn" required></label>
+          <label>English নাম *<input id="pfNameEn" required></label>
+          <label>SKU<input id="pfSku" readonly title="স্বয়ংক্রিয়"></label>
+          <label>মেইন ক্যাটাগরি *<select id="pfMain"></select></label>
+          <label>সাব-ক্যাটাগরি *<select id="pfSub"></select></label>
+          <label>দাম (৳) *<input id="pfPrice" type="number" min="0" required></label>
+          <label>আগের দাম (৳)<input id="pfOldPrice" type="number" min="0" placeholder="ছাড় না থাকলে খালি"></label>
+          <label>স্টক *<input id="pfStock" type="number" min="0" required></label>
+          <label>ট্যাগ<select id="pfTag">
+            <option value="">— নেই —</option>
+            <option value="flash-sale">ফ্ল্যাশ সেল</option>
+            <option value="best-seller">বেস্ট সেলার</option>
+            <option value="new">নতুন</option>
+            <option value="featured">ফিচার্ড</option>
+          </select></label>
+          <label>সাইজ (কমা দিয়ে)<input id="pfSizes" placeholder="M, L, XL, XXL"></label>
+          <label class="check"><input type="checkbox" id="pfVisible" checked> ওয়েবসাইটে দেখাবে</label>
+        </div>
+        <label>বাংলা বিবরণ<textarea id="pfDescBn" rows="2"></textarea></label>
+        <label>English বিবরণ<textarea id="pfDescEn" rows="2"></textarea></label>
+        <div class="img-rows-head row-between"><b>ছবি (৩–৪ বা আরও বেশি)</b><button type="button" class="btn btn-outline btn-sm" id="addImgRow">+ ছবি যোগ</button></div>
+        <div id="imgRows"></div>
+        <div class="err" id="prodErr"></div>
+        <div class="row-between">
+          <button class="btn btn-outline" id="prodCancel">বাতিল</button>
+          <button class="btn" id="prodSave">সেভ করুন</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATEGORIES -->
+    <section id="tab-categories" class="tab-page" hidden>
+      <p class="muted">কোন ক্যাটাগরি ওয়েবসাইটে দেখাবে, এখান থেকে চালু/বন্ধ করুন।</p>
+      <div id="catList" class="cat-list"></div>
+      <button class="btn" id="catSave">সেভ করুন</button>
+    </section>
+
+    <!-- ORDERS -->
+    <section id="tab-orders" class="tab-page" hidden>
+      <div class="row-between">
+        <input id="orderSearch" class="search" placeholder="খুঁজুন (নাম / ফোন / অর্ডার আইডি)...">
+        <select id="orderFilter">
+          <option value="">সব স্ট্যাটাস</option>
+          <option value="pending">পেন্ডিং</option>
+          <option value="confirmed">কনফার্মড</option>
+          <option value="shipped">শিপড</option>
+          <option value="delivered">ডেলিভার্ড</option>
+          <option value="cancelled">বাতিল</option>
+        </select>
+      </div>
+      <div id="orderList" class="order-list"></div>
+    </section>
+
+    <!-- REVIEWS -->
+    <section id="tab-reviews" class="tab-page" hidden>
+      <p class="muted">স্প্যাম রিভিউ এখান থেকে ডিলিট করুন।</p>
+      <div id="reviewList" class="order-list"></div>
+    </section>
+
+    <!-- NEWSLETTER -->
+    <section id="tab-newsletter" class="tab-page" hidden>
+      <div class="row-between">
+        <h3>WhatsApp নম্বর (<span id="nlCount">0</span>)</h3>
+        <button class="btn btn-outline btn-sm" id="nlCopy">সব কপি করুন</button>
+      </div>
+      <div id="nlList" class="nl-list"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab-page" hidden>
+      <div id="settingsSetup" class="setup-note" hidden>
+        <b>Firestore-এ সেটিংস নেই</b>
+        <p>ডিফল্ট সেটিংস সেভ করুন, তারপর এডিট করুন।</p>
+        <button class="btn" id="settingsInitBtn">ডিফল্ট সেটিংস সেভ করুন</button>
+      </div>
+      <div class="card form-card" id="settingsForm">
+        <h3>পেমেন্ট সেটিংস</h3>
+        <div class="form-grid">
+          <label>বিকাশ নম্বর<input id="sfBkash" placeholder="01XXXXXXXXX"></label>
+          <label>বিকাশ ধরন<select id="sfBkashLabel"><option value="personal">পার্সোনাল</option><option value="merchant">মার্চেন্ট</option></select></label>
+          <label>নগদ নম্বর<input id="sfNagad" placeholder="01XXXXXXXXX"></label>
+          <label>নগদ ধরন<select id="sfNagadLabel"><option value="personal">পার্সোনাল</option><option value="merchant">মার্চেন্ট</option></select></label>
+        </div>
+        <h3>ডেলিভারি সেটিংস</h3>
+        <div class="form-grid">
+          <label>ঢাকা সিটি (৳)<input id="sfCity" type="number" min="0"></label>
+          <label>ঢাকা সাব-এরিয়া (৳)<input id="sfSub" type="number" min="0"></label>
+          <label>ঢাকার বাইরে (৳)<input id="sfOutside" type="number" min="0"></label>
+          <label>ফ্রি ডেলিভারি (৳-এর ওপরে)<input id="sfFreeAbove" type="number" min="0"></label>
+        </div>
+        <h3>যোগাযোগ</h3>
+        <div class="form-grid">
+          <label>WhatsApp নম্বর (880...)<input id="sfWhatsapp" placeholder="8801XXXXXXXXX"></label>
+          <label>হটলাইন<input id="sfPhone" placeholder="096XXXXXXXX"></label>
+          <label>ইমেইল<input id="sfEmail" type="email"></label>
+          <label>ঠিকানা<input id="sfAddress"></label>
+        </div>
+        <div class="err" id="settingsErr"></div>
+        <button class="btn" id="settingsSave">সেভ করুন</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="data.js"></script>
+<script type="module" src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+rules_version = '2';
+
+/* AURA LIFESTYLE — Firestore Security Rules
+   ─────────────────────────────────────────
+   ADMIN_UIDS: নিচের লিস্টে আপনার Firebase Auth UID বসান
+   (ADMIN_SETUP.md ধাপ ৩ দেখুন — Firebase Console → Authentication →
+   Users → admin user-এর UID কপি করে এখানে বসান)।
+   একাধিক admin হলে কমা দিয়ে যোগ করুন: ['UID_1', 'UID_2'] */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function adminUids() {
+      return ['PASTE_ADMIN_UID_HERE'];
+    }
+    function isAdmin() {
+      return request.auth != null && request.auth.uid in adminUids();
+    }
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    /* Products: সবাই পড়তে পারে, শুধু admin লিখতে পারে */
+    match /products/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    /* Settings (payment numbers, delivery fees...): সবাই পড়ে, admin লেখে */
+    match /settings/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    /* Orders: যে কেউ তৈরি করতে পারে (guest checkout);
+       পড়তে/বদলাতে পারে শুধু admin, অথবা লগইন করা অর্ডারের মালিক */
+    match /orders/{id} {
+      allow create: if true;
+      allow get: if isAdmin() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow list: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    /* Public order-status mirror: guest tracking (orderId দিয়ে status দেখা)।
+       Customer data নেই — শুধু orderId + status। Create: guest checkout,
+       update: admin — তাই guest-রা নিজের অর্ডারের status দেখতে পারে। */
+    match /orderStatus/{id} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    /* Newsletter (WhatsApp numbers): যে কেউ দিতে পারে, দেখে শুধু admin */
+    match /newsletterNumbers/{id} {
+      allow create: if true;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    /* Reviews: সবাই পড়তে/লিখতে পারে, ডিলিট শুধু admin (spam নিয়ন্ত্রণ) */
+    match /reviews/{id} {
+      allow read, create: if true;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    /* Customer profiles: নিজেরটা নিজে */
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+  }
+}

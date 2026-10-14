@@ -12,25 +12,20 @@
 </head>
 <body>
 
-<!-- Top promo bar -->
-<div class="topbar"><div class="container">
-  <span id="promoBar">সারা বাংলাদেশে ক্যাশ অন ডেলিভারি • ৳২০০০+ অর্ডারে ফ্রি ডেলিভারি</span>
-  <span>হটলাইন: <a href="tel:09638090000" id="hotlineLink">09638090000</a></span>
-</div></div>
-
 <!-- Header -->
 <header class="header"><div class="container">
+  <button id="menuBtn" class="menu-btn" aria-label="মেনু">☰</button>
   <a class="logo" href="#home"><img src="logo.jpg" alt="AURA LIFESTYLE" /><span class="logo-txt">AURA <span>LIFESTYLE</span><small>ALWAYS WITH SUNNAH</small></span></a>
   <div class="searchbox">
-    <input id="searchInput" type="text" placeholder="প্রোডাক্ট খুঁজুন... / Search products..." autocomplete="off" />
+    <input id="searchInput" type="text" placeholder="প্রোডাক্ট খুঁজুন..." autocomplete="off" />
     <div class="suggest" id="suggestBox"></div>
   </div>
   <div class="h-actions">
     <button class="lang-toggle" id="langBtn" title="Switch language">EN</button>
-    <a class="h-link" href="#track" data-i18n="track">Track Order</a>
-    <a class="h-link" href="#" id="signinLink">Sign In</a>
-    <a class="h-link" href="#shop" id="wishLink" data-i18n="wishlist">Wishlist (<span id="wishCount">0</span>)</a>
-    <button class="cart-btn" id="cartBtn">Cart <span class="badge" id="cartCount">0</span></button>
+    <a class="h-link" href="#track" id="trackLink">Track Order</a>
+    <a class="h-link" href="#signin" id="signinLink">Sign In</a>
+    <a class="h-link" href="#wishlist" id="wishLink"><span id="wishLbl">Wishlist</span> (<span id="wishCount">0</span>)</a>
+    <button class="cart-btn" id="cartBtn"><span id="cartLbl">Cart</span> <span class="badge" id="cartCount">0</span></button>
   </div>
 </div></header>
 
@@ -38,7 +33,7 @@
 <nav class="nav"><div class="container" id="navCats"></div></nav>
 
 <!-- Demo-mode notice (hidden once Firebase is configured) -->
-<div class="demo-note" id="demoNote" style="display:none">ডেমো মোড: Firebase কনফিগ করা হয়নি — অর্ডার এই ডিভাইসে সংরক্ষিত হবে। (firebase.js-এ কনফিগ যোগ করুন)</div>
+<div class="demo-note" id="demoNote" style="display:none"></div>
 
 <!-- Main app -->
 <main class="container" id="app"></main>
@@ -47,26 +42,35 @@
 <footer class="footer"><div class="container">
   <div>
     <div class="f-brand">AURA <span>LIFESTYLE</span></div>
-    <p style="font-size:14px; margin:10px 0">বাংলাদেশের ইসলামিক লাইফস্টাইল ফ্যাশন ব্র্যান্ড। মানসম্মত পণ্য, সেরা দামে, সারা বাংলাদেশে ডেলিভারি।</p>
-    <div class="pay-badges"><span>Cash on Delivery</span><span>bKash</span><span>Nagad</span><span>Card</span></div>
+    <p style="font-size:14px; margin:10px 0" id="fBlurb">বাংলাদেশের ইসলামিক লাইফস্টাইল ফ্যাশন ব্র্যান্ড। মানসম্মত পণ্য, সেরা দামে, সারা বাংলাদেশে ডেলিভারি।</p>
+    <div class="pay-badges" id="payBadges"><span>Cash on Delivery</span><span>bKash</span><span>Nagad</span></div>
   </div>
   <div>
-    <h4>Shop</h4>
-    <a href="#shop">All Products</a><a href="#shop?main=men">Men's</a><a href="#shop?main=women">Women's</a><a href="#shop?main=kids">Kids</a><a href="#shop?main=cosmetics">Cosmetics</a><a href="#shop?main=islamic">Islamic</a>
+    <h4 id="fShopH">Shop</h4>
+    <span id="fShopLinks"><a href="#shop">All Products</a><a href="#shop?main=men">Men's</a><a href="#shop?main=women">Women's</a><a href="#shop?main=kids">Kids</a><a href="#shop?main=cosmetics">Cosmetics</a><a href="#shop?main=islamic">Islamic</a></span>
   </div>
   <div>
-    <h4>Information</h4>
-    <a href="#about">About Us</a><a href="#track">Track My Order</a><a href="#delivery">Delivery Info</a><a href="#returns">Return &amp; Refund</a><a href="#privacy">Privacy Policy</a><a href="#terms">Terms &amp; Conditions</a>
+    <h4 id="fInfoH">Information</h4>
+    <span id="fInfoLinks"><a href="#about">About Us</a><a href="#track">Track My Order</a><a href="#delivery">Delivery Info</a><a href="#returns">Return &amp; Refund</a><a href="#privacy">Privacy Policy</a><a href="#terms">Terms &amp; Conditions</a></span>
   </div>
   <div>
-    <h4>Talk To Us</h4>
-    <p style="font-size:14px">হটলাইন: <b style="color:#fff">09638090000</b> (সকাল ১০টা – রাত ৯টা)</p>
-    <p style="font-size:14px">care@auralifestyle.com.bd</p>
-    <p style="font-size:14px">Shop-3/1, Eastern Plaza, Hatirpool, Dhaka 1205</p>
-    <a href="#contact">Contact Us →</a>
+    <h4 id="fTalkH">Talk To Us</h4>
+    <p style="font-size:14px" id="fHotline">হটলাইন: <b style="color:#fff">09638090000</b> (সকাল ১০টা – রাত ৯টা)</p>
+    <p style="font-size:14px" id="fEmail">care@auralifestyle.com.bd</p>
+    <p style="font-size:14px" id="fAddr">Shop-3/1, Eastern Plaza, Hatirpool, Dhaka 1205</p>
+    <a href="#contact" id="fContactLink">Contact Us →</a>
   </div>
 </div>
-<div class="footer-bottom">© 2026 AURA LIFESTYLE. All rights reserved. • Developed for AURA LIFESTYLE</div></footer>
+<div class="footer-bottom" id="fBottom">© 2026 AURA LIFESTYLE. All rights reserved.</div></footer>
+
+<div class="lightbox" id="lightbox" aria-hidden="true"><button class="lb-close" id="lbClose" aria-label="Close">×</button><img id="lbImg" alt=""></div>
+
+<aside class="drawer" id="drawer" aria-label="menu">
+  <div class="drawer-head"><b id="drawerTitle">মেনু</b><button id="drawerClose" aria-label="Close">×</button></div>
+  <div class="drawer-sec"><button class="lang-toggle" id="drawerLang">EN</button></div>
+  <nav id="drawerNav"></nav>
+</aside>
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
 
 <div class="toast" id="toast"></div>
 

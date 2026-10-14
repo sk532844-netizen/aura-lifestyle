@@ -28,6 +28,7 @@
   <div class="h-actions">
     <button class="lang-toggle" id="langBtn" title="Switch language">EN</button>
     <a class="h-link" href="#track" data-i18n="track">Track Order</a>
+    <a class="h-link" href="#" id="signinLink">Sign In</a>
     <a class="h-link" href="#shop" id="wishLink" data-i18n="wishlist">Wishlist (<span id="wishCount">0</span>)</a>
     <button class="cart-btn" id="cartBtn">Cart <span class="badge" id="cartCount">0</span></button>
   </div>
@@ -68,6 +69,9 @@
 <div class="footer-bottom">© 2026 AURA LIFESTYLE. All rights reserved. • Developed for AURA LIFESTYLE</div></footer>
 
 <div class="toast" id="toast"></div>
+
+<!-- Floating cart bubble (visible on all pages except cart/checkout) -->
+<button id="cartBubble" class="cart-bubble" aria-label="কার্ট দেখুন"><span class="cb-count" id="cbCount">0</span><span class="cb-total" id="cbTotal">৳0</span></button>
 
 <script src="data.js"></script>
 <script type="module" src="firebase.js"></script>

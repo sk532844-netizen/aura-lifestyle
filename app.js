@@ -53,6 +53,18 @@ const I18N = {
   lowStock: { bn: 'মাত্র {n}টি বাকি', en: 'Only {n} left' },
   outStock: { bn: 'স্টক শেষ', en: 'Out of Stock' },
   freeShip: { bn: 'ফ্রি ডেলিভারি', en: 'Free Delivery' },
+  signin: { bn: 'সাইন ইন', en: 'Sign In' },
+  signinSoon: { bn: 'সাইন-ইন শীঘ্রই আসছে', en: 'Sign-in coming soon' },
+  waOrder: { bn: 'WhatsApp-এ অর্ডার', en: 'Order on WhatsApp' },
+  callOrder: { bn: 'কল করে অর্ডার', en: 'Call to Order' },
+  maxPrice: { bn: 'সর্বোচ্চ দাম', en: 'Max price' },
+  trust1: { bn: 'অরিজিনাল পণ্য', en: 'Genuine Products' },
+  trust2: { bn: 'ক্যাশ অন ডেলিভারি', en: 'Cash on Delivery' },
+  trust3: { bn: 'সারা দেশে ডেলিভারি', en: 'All-Bangladesh Delivery' },
+  trust4: { bn: 'নিরাপদ পেমেন্ট', en: 'Secure Payment' },
+  flashPromoT: { bn: 'ফ্ল্যাশ সেল — বিশেষ ছাড়', en: 'Flash Sale — Special Discounts' },
+  flashPromoS: { bn: 'সীমিত সময়ের অফারে পছন্দের পণ্য কিনুন', en: 'Grab your favorites at limited-time prices' },
+  viewOffer: { bn: 'অফার দেখুন', en: 'View Offers' },
 };
 const t = (k, vars) => { let s = (I18N[k] && I18N[k][LANG]) || k; if (vars) for (const [kk, vv] of Object.entries(vars)) s = s.replace('{' + kk + '}', vv); return s; };
 
@@ -82,6 +94,8 @@ async function init() {
   $('#langBtn').textContent = LANG === 'bn' ? 'EN' : 'বাং';
   $('#cartBtn').addEventListener('click', () => { location.hash = '#cart'; });
   $('#wishLink').addEventListener('click', (e) => { e.preventDefault(); location.hash = '#wishlist'; });
+  $('#signinLink').addEventListener('click', (e) => { e.preventDefault(); toast(t('signinSoon')); });
+  $('#cartBubble').addEventListener('click', () => { location.hash = '#cart'; });
 }
 
 function buildNav() {
@@ -98,8 +112,16 @@ function buildNav() {
 }
 
 function updateBadges() {
-  $('#cartCount').textContent = cart.reduce((s, i) => s + i.qty, 0);
+  const n = cart.reduce((s, i) => s + i.qty, 0);
+  $('#cartCount').textContent = n;
   $('#wishCount').textContent = wish.length;
+  const b = $('#cartBubble');
+  if (b) {
+    $('#cbCount').textContent = n;
+    $('#cbTotal').textContent = fmt(cartTotal());
+    const hide = /^(cart|checkout)/.test(location.hash.replace(/^#/, ''));
+    b.classList.toggle('show', n > 0 && !hide);
+  }
 }
 
 /* ---------------- search ---------------- */
@@ -141,6 +163,7 @@ function route() {
   else if (path.startsWith('order-success/')) app.innerHTML = viewOrderSuccess(path.split('/')[1]);
   else app.innerHTML = view404();
   bindDynamic();
+  updateBadges();
 }
 
 /* re-bind events after each render */
@@ -187,7 +210,15 @@ function viewHome() {
   const best = PRODUCTS.filter((p) => p.tag === 'best-seller').slice(0, 4);
   const mains = visibleMains();
   return `
-  <div class="hero hero-single"><img src="cover.jpg" alt="AURA LIFESTYLE"><div class="hero-cta"><a class="btn" href="#shop">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div>
+  <div class="hero-carousel" id="heroCarousel">
+    <div class="hc-track" id="hcTrack">
+      <div class="hc-slide"><img src="cover.jpg" alt="AURA LIFESTYLE"><div class="hero-cta"><a class="btn" href="#shop">${LANG === 'bn' ? 'এখনই শপ করুন' : 'Shop Now'}</a></div></div>
+      <div class="hc-slide hc-promo"><div class="hc-promo-txt"><h2>${t('flashPromoT')}</h2><p>${t('flashPromoS')}</p><a class="btn" href="#shop">${t('viewOffer')}</a></div></div>
+    </div>
+    <button class="hc-arrow hc-prev" id="hcPrev" aria-label="previous">‹</button>
+    <button class="hc-arrow hc-next" id="hcNext" aria-label="next">›</button>
+    <div class="hc-dots" id="hcDots"><button class="on" data-i="0" aria-label="slide 1"></button><button data-i="1" aria-label="slide 2"></button></div>
+  </div>
 
   <section class="section"><div class="section-head"><h2>${t('categories')}</h2><a href="#shop">${t('viewAll')} →</a></div>
   <div class="main-cat-grid">${mains.map((m) => {
@@ -198,6 +229,13 @@ function viewHome() {
   ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:14px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
 
   <section class="section"><div class="section-head"><h2>${t('best')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${best.map(prodCard).join('')}</div></section>
+
+  <div class="trust-row">
+    <div class="trust-item"><span class="trust-ic">✓</span><span>${t('trust1')}</span></div>
+    <div class="trust-item"><span class="trust-ic">✓</span><span>${t('trust2')}</span></div>
+    <div class="trust-item"><span class="trust-ic">✓</span><span>${t('trust3')}</span></div>
+    <div class="trust-item"><span class="trust-ic">✓</span><span>${t('trust4')}</span></div>
+  </div>
 
   <div class="promo-strip"><div><b>${LANG === 'bn' ? 'ফ্রি ডেলিভারি' : 'Free Delivery'}</b><span>${LANG === 'bn' ? '৳২০০০+ অর্ডারে সারা বাংলাদেশে ফ্রি ডেলিভারি' : 'On orders above ৳2000, all over Bangladesh'}</span></div><a class="btn" href="#shop">${LANG === 'bn' ? 'শপ করুন' : 'Shop'}</a></div>
 
@@ -238,11 +276,15 @@ function viewShop(params) {
   const heading = main ? (sub ? `${mainLabel} › ${subLabel}` : mainLabel) : (q ? `Search: "${esc(q)}"` : t('shop'));
   const mains = visibleMains();
   const subs = main ? mainOf(main).subs : [];
+  const allPrices = PRODUCTS.map((x) => x.price);
+  const pMin = Math.min(...allPrices), pMax = Math.max(...allPrices);
+  const sliderVal = maxPrice > 0 ? Math.min(maxPrice, pMax) : pMax;
   return `<section class="section"><div class="crumb"><a href="#home">${t('home')}</a> › <a href="#shop">${t('shop')}</a>${main ? ` › <a href="#shop?main=${main}">${esc(mainLabel)}</a>` : ''}${sub ? ` › <span>${esc(subLabel)}</span>` : ''}</div>
   <h2 style="color:var(--navy)">${esc(heading)}</h2>
   <div class="filters" style="margin-top:14px">
     <select id="fSort"><option value="popular" ${sort === 'popular' ? 'selected' : ''}>সবচেয়ে জনপ্রিয়</option><option value="low" ${sort === 'low' ? 'selected' : ''}>দাম: কম → বেশি</option><option value="high" ${sort === 'high' ? 'selected' : ''}>দাম: বেশি → কম</option><option value="new" ${sort === 'new' ? 'selected' : ''}>নতুন আগে</option></select>
     <select id="fMax"><option value="0">সব দাম</option><option value="1000" ${maxPrice === 1000 ? 'selected' : ''}>৳১০০০-এর নিচে</option><option value="2000" ${maxPrice === 2000 ? 'selected' : ''}>৳২০০০-এর নিচে</option><option value="3000" ${maxPrice === 3000 ? 'selected' : ''}>৳৩০০০-এর নিচে</option></select>
+    <div class="price-slider"><label>${t('maxPrice')}: <b id="fPriceVal">${fmt(sliderVal)}</b></label><input type="range" id="fPrice" min="${pMin}" max="${pMax}" step="50" value="${sliderVal}"></div>
     <input id="fQ" placeholder="এই পেজে খুঁজুন..." value="${esc(q)}">
   </div>
   <div class="filter-label">${LANG === 'bn' ? 'ক্যাটাগরি' : 'Category'}</div>
@@ -270,8 +312,11 @@ function viewProduct(id) {
   const related = [...PRODUCTS.filter((x) => x.main === p.main && x.sub === p.sub && x.id !== p.id),
     ...PRODUCTS.filter((x) => x.main === p.main && x.sub !== p.sub && x.id !== p.id)].slice(0, 4);
   const seedRv = seedReviews[p.id] || [];
+  const imgs = (Array.isArray(p.images) && p.images.length ? p.images : [p.img]).filter(Boolean);
+  const waText = encodeURIComponent(`আসসালামু আলাইকুম! আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n${name} (SKU: ${p.sku || '-'}) — ${fmt(p.price)}\n${location.href}`);
   return `<section class="section"><div class="crumb"><a href="#home">${t('home')}</a> › <a href="#shop">${t('shop')}</a> › <a href="#shop?main=${p.main}">${esc(LANG === 'bn' ? mainOf(p.main).bn : mainOf(p.main).en)}</a> › <a href="#shop?main=${p.main}&sub=${p.sub}">${esc(LANG === 'bn' ? subOf(p.main, p.sub).bn : subOf(p.main, p.sub).en)}</a> › <span>${esc(name)}</span></div><div class="pd">
-    <div><img class="main" src="${esc(p.img)}" alt="${esc(name)}" onerror="this.src='${FALLBACK_IMG}'"></div>
+    <div class="pd-gallery"><img class="main" id="pdMain" src="${esc(imgs[0])}" alt="${esc(name)}" onerror="this.src='${FALLBACK_IMG}'">
+    ${imgs.length > 1 ? `<div class="pd-thumbs">${imgs.map((im, i) => `<button class="pd-thumb${i === 0 ? ' on' : ''}" data-src="${esc(im)}" aria-label="ছবি ${i + 1}"><img src="${esc(im)}" alt="" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"></button>`).join('')}</div>` : ''}</div>
     <div>
       <span style="color:var(--muted); font-size:13px">${esc(prodMainLabel(p))}</span>
       <h1>${esc(name)}</h1>
@@ -285,6 +330,7 @@ function viewProduct(id) {
       <div class="err" id="sizeErr"></div>
       <div class="qty-row"><button id="qMinus">−</button><b id="qVal">1</b><button id="qPlus">+</button><span style="color:var(--muted); font-size:13px">পরিমাণ</span></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap"><button class="btn btn-dark" id="pdAdd" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button><button class="btn" id="pdBuy" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('buyNow')}</button><button class="btn btn-outline" id="pdWish">${wish.includes(p.id) ? '♥ Saved' : '♡ Wishlist'}</button></div>
+      <div class="order-alt"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/${esc(SETTINGS.whatsapp)}?text=${waText}">${t('waOrder')}</a><a class="btn btn-outline btn-sm" href="tel:${esc(SETTINGS.phone)}">${t('callOrder')}</a></div>
       <div class="meta-box">
         <div>ডেলিভারি: ঢাকায় ২৪–৪৮ ঘণ্টা, ঢাকার বাইরে ২–৪ দিন</div>
         <div>পেমেন্ট: ক্যাশ অন ডেলিভারি, বিকাশ, নগদ, কার্ড</div>
@@ -431,7 +477,7 @@ async function placeOrder(e) {
   err.textContent = '';
   btn.disabled = true;
   const btnLabel = btn.innerHTML;
-  btn.innerHTML = 'অর্ডার প্রসেস হচ্ছে… ⏳';
+  btn.innerHTML = 'অর্ডার প্রসেস হচ্ছে…';
   try {
     const sub = cartTotal();
     const del = deliveryFor(district);
@@ -645,11 +691,40 @@ bindDynamic = function () {
   /* contact form */
   const cf = $('#contactForm');
   if (cf) cf.addEventListener('submit', (e) => { e.preventDefault(); toast('মেসেজ পাঠানো হয়েছে — আমরা যোগাযোগ করবো।'); cf.reset(); });
+  /* hero carousel */
+  const hc = $('#heroCarousel');
+  if (hc) {
+    const track = $('#hcTrack');
+    const dots = $$('#hcDots button');
+    let cur = 0, timer = null;
+    const go = (i) => {
+      cur = (i + 2) % 2;
+      track.style.transform = `translateX(-${cur * 100}%)`;
+      dots.forEach((d, di) => d.classList.toggle('on', di === cur));
+    };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const start = () => { stop(); timer = setInterval(() => { if (!document.contains(hc)) { stop(); return; } go(cur + 1); }, 5000); };
+    $('#hcPrev').addEventListener('click', () => { go(cur - 1); start(); });
+    $('#hcNext').addEventListener('click', () => { go(cur + 1); start(); });
+    dots.forEach((d) => d.addEventListener('click', () => { go(parseInt(d.dataset.i, 10)); start(); }));
+    start();
+  }
   /* shop filters */
   const fSort = $('#fSort');
   if (fSort) fSort.addEventListener('change', () => { const u = new URLSearchParams(location.hash.split('?')[1] || ''); u.set('sort', fSort.value); u.delete('page'); location.hash = '#shop?' + u.toString(); });
   const fMax = $('#fMax');
   if (fMax) fMax.addEventListener('change', () => { const u = new URLSearchParams(location.hash.split('?')[1] || ''); if (fMax.value === '0') u.delete('max'); else u.set('max', fMax.value); u.delete('page'); location.hash = '#shop?' + u.toString(); });
+  const fPrice = $('#fPrice');
+  if (fPrice) {
+    const pMaxV = parseInt(fPrice.max, 10);
+    fPrice.addEventListener('input', () => { const v = $('#fPriceVal'); if (v) v.textContent = fmt(parseInt(fPrice.value, 10)); });
+    fPrice.addEventListener('change', () => {
+      const u = new URLSearchParams(location.hash.split('?')[1] || '');
+      const v = parseInt(fPrice.value, 10);
+      if (v >= pMaxV) u.delete('max'); else u.set('max', String(v));
+      u.delete('page'); location.hash = '#shop?' + u.toString();
+    });
+  }
   const fQ = $('#fQ');
   if (fQ) fQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const u = new URLSearchParams(location.hash.split('?')[1] || ''); const v = fQ.value.trim(); if (v) u.set('q', v); else u.delete('q'); u.delete('page'); location.hash = '#shop?' + u.toString(); } });
   /* product detail */
@@ -658,6 +733,11 @@ bindDynamic = function () {
     let selSize = null, qty = 1;
     const pid = location.hash.split('/')[1];
     $$('#sizeRow .size-btn').forEach((b) => b.addEventListener('click', () => { selSize = b.dataset.size; $$('#sizeRow .size-btn').forEach((x) => x.classList.toggle('on', x === b)); $('#sizeErr').textContent = ''; }));
+    $$('.pd-thumb').forEach((th) => th.addEventListener('click', () => {
+      const main = $('#pdMain');
+      if (main) main.src = th.dataset.src;
+      $$('.pd-thumb').forEach((x) => x.classList.toggle('on', x === th));
+    }));
     $('#qMinus').addEventListener('click', () => { qty = Math.max(1, qty - 1); $('#qVal').textContent = qty; });
     $('#qPlus').addEventListener('click', () => { qty = Math.min(99, qty + 1); $('#qVal').textContent = qty; });
     $('#pdAdd').addEventListener('click', () => { if (!selSize && prodById(pid)?.sizes?.length) { $('#sizeErr').textContent = 'সাইজ নির্বাচন করুন।'; return; } addToCart(pid, qty, selSize); });

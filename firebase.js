@@ -41,6 +41,7 @@ const C = {
 export const OWNER_UID = 'SNSSuBuLbgRSQy4moDwz6rWnYmv1';
 
 let _fb = null;      /* { app, auth, db, aFns, fFns } */
+let _fbPromise = null; /* init চলাকালীন concurrent call-রা একই promise await করে (race fix) */
 let _initTried = false;
 
 export function isConfigured() {
@@ -52,28 +53,32 @@ export function isConfigured() {
 /* Lazy-load Firebase SDK; null = demo mode (config missing/offline). */
 async function fb() {
   if (_fb) return _fb;
+  if (_fbPromise) return _fbPromise;
   if (_initTried) return null;
   _initTried = true;
   if (!isConfigured()) return null;
-  try {
-    const [appMod, authMod, fsMod] = await Promise.all([
-      import(`${SDK}/firebase-app.js`),
-      import(`${SDK}/firebase-auth.js`),
-      import(`${SDK}/firebase-firestore.js`),
-    ]);
-    const app = appMod.initializeApp(FIREBASE_CONFIG);
-    _fb = {
-      app,
-      auth: authMod.getAuth(app),
-      db: fsMod.getFirestore(app),
-      aFns: authMod,
-      fFns: fsMod,
-    };
-    return _fb;
-  } catch (e) {
-    console.warn('[AURA] Firebase init failed, using local mode:', e);
-    return null;
-  }
+  _fbPromise = (async () => {
+    try {
+      const [appMod, authMod, fsMod] = await Promise.all([
+        import(`${SDK}/firebase-app.js`),
+        import(`${SDK}/firebase-auth.js`),
+        import(`${SDK}/firebase-firestore.js`),
+      ]);
+      const app = appMod.initializeApp(FIREBASE_CONFIG);
+      _fb = {
+        app,
+        auth: authMod.getAuth(app),
+        db: fsMod.getFirestore(app),
+        aFns: authMod,
+        fFns: fsMod,
+      };
+      return _fb;
+    } catch (e) {
+      console.warn('[AURA] Firebase init failed, using local mode:', e);
+      return null;
+    }
+  })();
+  return _fbPromise;
 }
 
 function friendlyAuthError(e) {

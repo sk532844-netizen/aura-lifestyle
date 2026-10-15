@@ -362,13 +362,7 @@ async function init() {
   si.addEventListener('input', onSearchInput);
   si.addEventListener('keydown', (e) => { if (e.key === 'Enter') { location.hash = '#shop?q=' + encodeURIComponent(si.value.trim()); $('#suggestBox').classList.remove('open'); } });
   document.addEventListener('click', (e) => { if (!e.target.closest('.searchbox')) $('#suggestBox').classList.remove('open'); });
-  $('#langBtn').addEventListener('click', () => {
-    LANG = LANG === 'bn' ? 'en' : 'bn';
-    localStorage.setItem('aura_lang', LANG);
-    applyStaticI18n();
-    if (!isConfigured()) { const dn = $('#demoNote'); if (dn && dn.style.display !== 'none') dn.textContent = t('demoNote'); }
-    buildNav(); route();
-  });
+  $('#langBtn').addEventListener('click', () => setLang(LANG === 'bn' ? 'en' : 'bn'));
   $('#cartBtn').addEventListener('click', () => { location.hash = '#cart'; });
   $('#wishLink').addEventListener('click', (e) => { e.preventDefault(); location.hash = '#wishlist'; });
   $('#cartBubble').addEventListener('click', () => { location.hash = '#cart'; });
@@ -384,8 +378,10 @@ async function init() {
   if (db) db.addEventListener('click', closeDrawer);
   const dn = $('#drawerNav');
   if (dn) dn.addEventListener('click', (e) => { if (e.target.closest('a')) closeDrawer(); });
-  const dl = $('#drawerLang');
-  if (dl) dl.addEventListener('click', () => $('#langBtn').click());
+  const dlb = $('#drawerLangBn');
+  if (dlb) dlb.addEventListener('click', () => setLang('bn'));
+  const dle = $('#drawerLangEn');
+  if (dle) dle.addEventListener('click', () => setLang('en'));
 }
 
 function buildNav() {
@@ -1187,11 +1183,28 @@ function closeDrawer() {
 function buildDrawer() {
   const nav = $('#drawerNav');
   if (!nav) return;
-  const cats = visibleMains().map((m) => `<a href="#shop?main=${m.slug}">${esc(LANG === 'bn' ? m.bn : m.en)}</a>`).join('');
-  nav.innerHTML = `<a href="#track">${t('track')}</a><a href="#signin">${t('signin')}</a><a href="#wishlist">${t('wishlist')}</a><a href="#shop">${t('shop')}</a>`
-    + `<div class="drawer-h">${t('drawerCats')}</div>${cats}`
-    + `<div class="drawer-h">${t('drawerInfo')}</div>`
-    + `<a href="#about">${t('fAbout')}</a><a href="#contact">${t('ctT')}</a><a href="#faq">${t('faqT')}</a><a href="#delivery">${t('dlT')}</a><a href="#returns">${t('rtT')}</a><a href="#terms">${t('tmT')}</a>`;
+  const row = (href, label, color) => `<a href="${href}"><span class="d-dot" style="background:${color}"></span><span class="d-lbl">${label}</span><span class="d-ch">›</span></a>`;
+  const cats = visibleMains().map((m) => row(`#shop?main=${m.slug}`, esc(LANG === 'bn' ? m.bn : m.en), '#c9a227')).join('');
+  nav.innerHTML = `<div class="d-sec">`
+    + row('#track', t('track'), '#c9a227')
+    + row('#signin', t('signin'), '#3b5aa0')
+    + row('#wishlist', t('wishlist'), '#c0392b')
+    + row('#shop', t('shop'), '#2e7d32')
+    + `</div><div class="drawer-h">${t('drawerCats')}</div><div class="d-sec d-cats">${cats}</div>`;
+  syncDrawerLang();
+}
+function syncDrawerLang() {
+  const bn = $('#drawerLangBn'), en = $('#drawerLangEn');
+  if (bn) bn.classList.toggle('on', LANG === 'bn');
+  if (en) en.classList.toggle('on', LANG === 'en');
+}
+function setLang(l) {
+  if (LANG === l) return;
+  LANG = l;
+  localStorage.setItem('aura_lang', LANG);
+  applyStaticI18n();
+  if (!isConfigured()) { const dn = $('#demoNote'); if (dn && dn.style.display !== 'none') dn.textContent = t('demoNote'); }
+  buildNav(); route();
 }
 
 /* ================= static chrome i18n (header/footer/drawer) ================= */
@@ -1204,7 +1217,6 @@ function applyStaticI18n() {
   set('signinLink', t('signin'));
   set('wishLbl', t('wishlist'));
   set('cartLbl', t('cart'));
-  set('drawerTitle', t('drawerMenu'));
   set('fBlurb', t('fBlurb'));
   set('fShopH', t('fShopH'));
   set('fInfoH', t('fInfoH'));
@@ -1212,8 +1224,7 @@ function applyStaticI18n() {
   set('fBottom', t('fBottom'));
   const lb = $('#langBtn');
   if (lb) { lb.textContent = LANG === 'bn' ? 'EN' : 'বাং'; lb.title = LANG === 'bn' ? 'Switch to English' : 'বাংলায় দেখুন'; }
-  const dl = $('#drawerLang');
-  if (dl) dl.textContent = LANG === 'bn' ? 'EN' : 'বাং';
+  syncDrawerLang();
   const mb = $('#menuBtn');
   if (mb) mb.setAttribute('aria-label', t('drawerMenu'));
   const cb = $('#cartBubble');

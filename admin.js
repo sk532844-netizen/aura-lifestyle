@@ -216,8 +216,9 @@ function renderProducts() {
     const img = (p.images && p.images[0]) || p.img || '';
     const vis = p.visible !== false;
     const sizes = p.sizes || [];
+    const hasSizeStock = !!(p.sizeStock && typeof p.sizeStock === 'object' && Object.keys(p.sizeStock).length);
     const stockTxt = sizes.length
-      ? sizes.map((s) => `${esc(s)}:${sizeQty(p, s)}`).join(' · ')
+      ? (hasSizeStock ? sizes.map((s) => `${esc(s)}:${sizeQty(p, s)}`).join(' · ') : `মোট ${totalStock(p)}`)
       : String(totalStock(p));
     return `<tr>
       <td><img class="thumb" src="${esc(img)}" alt="" onerror="this.style.visibility='hidden'"></td>
@@ -296,7 +297,20 @@ function renderSizeRows(p) {
   const box = $('#sizeRows');
   box.innerHTML = '';
   const sizes = p && p.sizes && p.sizes.length ? p.sizes : (p ? [] : ['M', 'L', 'XL', 'XXL']);
-  sizes.forEach((s) => addSizeRow(s, p ? sizeQty(p, s) : ''));
+  const hasSizeStock = !!(p && p.sizeStock && typeof p.sizeStock === 'object' && Object.keys(p.sizeStock).length);
+  sizes.forEach((s) => addSizeRow(s, hasSizeStock && p.sizeStock[s] !== undefined ? p.sizeStock[s] : ''));
+  /* পুরনো প্রোডাক্টে (sizeStock নেই) — admin-কে প্রতি সাইজে ভাগ করে দিতে হবে */
+  let hint = $('#sizeLegacyHint');
+  if (!hasSizeStock && p && sizes.length) {
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'sizeLegacyHint';
+      hint.className = 'muted small';
+      hint.style.cssText = 'margin-top:6px;color:#b45309';
+      box.after(hint);
+    }
+    hint.textContent = `⚠️ পুরনো প্রোডাক্ট — আগে মোট স্টক ছিল ${totalStock(p)} পিস। প্রতি সাইজে কত পিস আছে লিখুন।`;
+  } else if (hint) hint.remove();
   /* সাইজ না থাকলে সাধারণ স্টক */
   $('#pfStockGen').value = p ? (sizes.length ? '' : (p.stock ?? '')) : '';
   syncTotalStock();

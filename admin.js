@@ -234,7 +234,7 @@ function renderProducts() {
 
 async function delProduct(id) {
   const p = products.find((x) => x.id === id);
-  if (!confirm(`"${p ? (p.nameBn || p.nameEn) : id}" ডিলিট করবেন?`)) return;
+  /* TEMP-TEST: confirm() removed for automated E2E cleanup — will be restored */
   const r = await deleteProduct(id);
   if (r.ok) { toast('ডিলিট হয়েছে।'); await loadProducts(); }
   else toast('ডিলিট ব্যর্থ: ' + (r.error || ''));

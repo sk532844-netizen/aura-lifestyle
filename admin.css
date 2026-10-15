@@ -1,4 +1,6 @@
 /* AURA LIFESTYLE — Admin Panel styles (navy/gold) */
+/* hidden attribute must always win over class display rules (e.g. .login-wrap) */
+[hidden] { display: none !important; }
 :root {
   --navy: #14213d;
   --navy2: #1f2f52;

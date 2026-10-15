@@ -234,7 +234,7 @@ function renderProducts() {
 
 async function delProduct(id) {
   const p = products.find((x) => x.id === id);
-  /* TEMP-TEST: confirm() removed for automated E2E cleanup — will be restored */
+  if (!confirm(`"${p ? (p.nameBn || p.nameEn) : id}" ডিলিট করবেন?`)) return;
   const r = await deleteProduct(id);
   if (r.ok) { toast('ডিলিট হয়েছে।'); await loadProducts(); }
   else toast('ডিলিট ব্যর্থ: ' + (r.error || ''));
@@ -621,7 +621,7 @@ function renderImpPreview() {
 
 async function runBulkImport() {
   const upd = $('#impUpdateDup').checked;
-  /* TEMP-TEST: confirm() removed for automated E2E — will be restored */
+  if (!confirm(`${impValidated.filter((v) => v.status === 'new' || (upd && v.status === 'duplicate')).length}টি প্রোডাক্ট ইমপোর্ট করবেন?`)) return;
   const wrap = $('#impResultWrap'), prog = $('#impProgress'), bar = $('#impProgressBar');
   wrap.hidden = false; prog.hidden = false;
   $('#impRun').disabled = true;

@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview } from './firebase.js';
-import * as fb from './firebase.js'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview } from './firebase.js?v=20261015';
+import * as fb from './firebase.js?v=20261015'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);

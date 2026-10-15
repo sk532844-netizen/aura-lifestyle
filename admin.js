@@ -10,7 +10,7 @@ import {
   fetchAllReviews, deleteReview,
   fetchNewsletterNumbers,
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
-} from './firebase.js';
+} from './firebase.js?v=20261015';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
 /* admin-import.js (classic script) global: window.AuraImport */

@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diag2</title></head>
+<body><pre id="out">testing...</pre>
+<script type="module">
+const out = (t) => { document.getElementById('out').textContent += '\n' + t; };
+const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
+try {
+  out('importing 3 SDK modules (app, auth, firestore)...');
+  const [appMod, authMod, fsMod] = await Promise.all([
+    import(`${SDK}/firebase-app.js`),
+    import(`${SDK}/firebase-auth.js`),
+    import(`${SDK}/firebase-firestore.js`),
+  ]);
+  out('all 3 imports OK');
+  const app = appMod.initializeApp({
+    apiKey: 'AIzaSyDo4hHOQ4ias2uYgZdXdhBsQRzwpsb-6SU',
+    authDomain: 'gen-lang-client-0710305331.firebaseapp.com',
+    projectId: 'gen-lang-client-0710305331',
+  });
+  const db = fsMod.getFirestore(app);
+  const snap = await fsMod.getDoc(fsMod.doc(db, 'settings', 'main'));
+  out('settings exists=' + snap.exists());
+  out('DIAG2 COMPLETE');
+} catch (e) {
+  out('ERROR: ' + (e && e.message ? e.message : String(e)));
+  out('DIAG2 FAILED');
+}
+</script></body></html>

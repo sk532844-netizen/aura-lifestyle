@@ -13,7 +13,7 @@ import {
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
   createStaffAccount, uploadProductImage, deleteProductImage,
   sizeQty, totalStock, tabsForRole, orderFullForRole, OWNER_UID,
-} from './firebase.js?v=20261017';
+} from './firebase.js?v=20261018b';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
 /* admin-import.js (classic script) global: window.AuraImport */

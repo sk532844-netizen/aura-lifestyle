@@ -159,3 +159,35 @@ label.check input { width: auto; }
   .imp-table th, .imp-table td { padding: 6px 8px; }
   .file-input { width: 100%; }
 }
+
+/* ---------- size-wise stock editor ---------- */
+.size-stock-head { margin: 12px 0 8px; }
+#sizeRows { display: flex; flex-direction: column; gap: 8px; }
+.size-row-edit { display: grid; grid-template-columns: 1fr 90px 40px; gap: 8px; align-items: center; }
+.size-row-edit input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+
+/* ---------- image upload ---------- */
+.upload-prev { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.up-chip { font-size: 12px; background: var(--bg-soft, #f5f5f5); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+
+/* ---------- staff permissions ---------- */
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 12px; margin-top: 8px; }
+.perm-grid .check { font-size: 14px; }
+.suspended-row { opacity: .65; }
+
+/* ---------- compact order cards ---------- */
+.order-card.compact .compact-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.expand-btn { border: none; background: none; font-size: 16px; cursor: pointer; padding: 2px 6px; color: var(--gold, #c9a227); }
+.oc-cust { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.oc-total { font-weight: 700; white-space: nowrap; }
+.order-details { border-top: 1px dashed var(--line); padding: 10px 12px; }
+.order-card.compact .status-select { max-width: 130px; }
+
+/* ---------- visible toggle pill ---------- */
+.vis-toggle { cursor: pointer; border: none; font: inherit; }
+.vis-toggle:hover { opacity: .8; }
+
+@media (max-width: 640px) {
+  .order-card.compact .compact-head { flex-wrap: wrap; gap: 6px; }
+  .oc-cust { flex-basis: 100%; }
+}

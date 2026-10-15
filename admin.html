@@ -106,12 +106,24 @@
             <option value="new">নতুন</option>
             <option value="featured">ফিচার্ড</option>
           </select></label>
-          <label>সাইজ (কমা দিয়ে)<input id="pfSizes" placeholder="M, L, XL, XXL"></label>
+        </div>
+        <div class="size-stock-head row-between"><b>সাইজ ও স্টক <span class="muted small">(যে সাইজে ০ থাকবে, ওটায় অর্ডার বন্ধ)</span></b><button type="button" class="btn btn-outline btn-sm" id="addSizeRow">+ সাইজ</button></div>
+        <div id="sizeRows"></div>
+        <div class="muted small" id="stockTotalHint" style="margin-top:4px">মোট: 0 পিস</div>
+        <label style="margin-top:8px; display:block">সাধারণ স্টক <span class="muted small">(সাইজ না থাকলে এটা গণ্য হবে)</span><input id="pfStockGen" type="number" min="0"></label>
+        <input type="hidden" id="pfStock" value="0">
+        <div class="row-gap" style="margin-top:6px">
           <label class="check"><input type="checkbox" id="pfVisible" checked> ওয়েবসাইটে দেখাবে</label>
         </div>
         <label>বাংলা বিবরণ<textarea id="pfDescBn" rows="2"></textarea></label>
         <label>English বিবরণ<textarea id="pfDescEn" rows="2"></textarea></label>
-        <div class="img-rows-head row-between"><b>ছবি (৩–৪ বা আরও বেশি)</b><button type="button" class="btn btn-outline btn-sm" id="addImgRow">+ ছবি যোগ</button></div>
+        <div class="img-rows-head row-between"><b>ছবি (৩–৪ বা আরও বেশি)</b>
+          <div class="row-gap">
+            <label class="btn btn-outline btn-sm" style="cursor:pointer">📷 গ্যালারি<input type="file" id="imgFile" accept="image/*" multiple hidden></label>
+            <button type="button" class="btn btn-outline btn-sm" id="addImgRow">+ URL</button>
+          </div>
+        </div>
+        <div id="imgUploadPrev" class="upload-prev"></div>
         <div id="imgRows"></div>
         <div class="err" id="prodErr"></div>
         <div class="row-between">
@@ -199,19 +211,33 @@
     <section id="tab-staff" class="tab-page" hidden>
       <div class="card">
         <h3>স্টাফ ম্যানেজমেন্ট <span class="muted small">(শুধু মালিক)</span></h3>
-        <p class="muted">স্টাফের Firebase অ্যাকাউন্ট আগে <b>Firebase Console → Authentication → Add user</b> থেকে বানান, তারপর এখানে UID + role দিন। Login panel একটাই — role অনুযায়ী tab দেখা যাবে।</p>
+        <p class="muted">এখানেই ইমেইল + পাসওয়ার্ড দিয়ে স্টাফের অ্যাকাউন্ট বানানো যাবে — Firebase Console-এ যাওয়া লাগবে না। Role বেছে নিলে অনুমতি অটো বসবে, চাইলে নিজে টিক দিয়ে বদলানো যাবে।</p>
         <div class="form-grid">
           <label>ইমেইল<input id="stEmail" type="email" placeholder="staff@example.com"></label>
-          <label>Firebase UID<input id="stUid" placeholder="UID পেস্ট করুন"></label>
-          <label>Role<select id="stRole"><option value="manager">ম্যানেজার</option><option value="assistant">সহকারী</option></select></label>
+          <label>পাসওয়ার্ড<input id="stPass" type="password" placeholder="কমপক্ষে ৬ অক্ষর" autocomplete="new-password"></label>
+          <label>Role<select id="stRole"><option value="manager">ম্যানেজার</option><option value="assistant">সহকারী</option><option value="custom">কাস্টম</option></select></label>
         </div>
+        <div style="margin-top:10px"><b>অনুমতি (কোন tab দেখবে)</b></div>
+        <div class="perm-grid" id="stTabsBox">
+          <label class="check"><input type="checkbox" data-ptab="dashboard"> ড্যাশবোর্ড</label>
+          <label class="check"><input type="checkbox" data-ptab="products"> প্রোডাক্ট</label>
+          <label class="check"><input type="checkbox" data-ptab="categories"> ক্যাটাগরি</label>
+          <label class="check"><input type="checkbox" data-ptab="orders"> অর্ডার</label>
+          <label class="check"><input type="checkbox" data-ptab="reviews"> রিভিউ</label>
+          <label class="check"><input type="checkbox" data-ptab="newsletter"> নিউজলেটার</label>
+          <label class="check"><input type="checkbox" data-ptab="import"> ইমপোর্ট</label>
+          <label class="check"><input type="checkbox" data-ptab="settings"> সেটিংস</label>
+          <label class="check"><input type="checkbox" data-ptab="staff"> স্টাফ</label>
+        </div>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="stOrderFull"> অর্ডার ফুল কন্ট্রোল <span class="muted small">(stage ছাড়াও এডিট)</span></label>
         <div class="row-gap" style="margin-top:10px">
-          <button class="btn" id="stAdd">স্টাফ যোগ করুন</button>
+          <button class="btn" id="stAdd">স্টাফ অ্যাকাউন্ট বানান</button>
+          <button class="btn btn-outline" id="stCancelEdit" hidden>বাতিল</button>
         </div>
         <div class="err" id="stErr"></div>
         <h4 style="margin-top:16px">বর্তমান স্টাফ</h4>
         <div class="table-scroll"><table class="imp-table" id="stTable">
-          <thead><tr><th>ইমেইল</th><th>UID</th><th>Role</th><th></th></tr></thead>
+          <thead><tr><th>ইমেইল</th><th>Role</th><th>অবস্থা</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -246,6 +272,12 @@
           <label>ইমেইল<input id="sfEmail" type="email"></label>
           <label>ঠিকানা<input id="sfAddress"></label>
         </div>
+        <h3>সোশ্যাল মিডিয়া</h3>
+        <div class="form-grid">
+          <label>Facebook পেজ URL<input id="sfFb" placeholder="https://facebook.com/..."></label>
+          <label>Instagram URL<input id="sfIg" placeholder="https://instagram.com/..."></label>
+          <label>YouTube URL<input id="sfYt" placeholder="https://youtube.com/..."></label>
+        </div>
         <div class="err" id="settingsErr"></div>
         <button class="btn" id="settingsSave">সেভ করুন</button>
       </div>
@@ -257,6 +289,6 @@
 <script src="data.js?v=20261015"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="admin-import.js?v=20261015"></script>
-<script type="module" src="admin.js?v=20261015e"></script>
+<script type="module" src="admin.js?v=20261016"></script>
 </body>
 </html>

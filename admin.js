@@ -10,7 +10,9 @@ import {
   fetchAllReviews, deleteReview,
   fetchNewsletterNumbers,
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
-} from './firebase.js?v=20261015';
+  createStaffAccount, uploadProductImage, deleteProductImage,
+  sizeQty, totalStock, tabsForRole, orderFullForRole, OWNER_UID,
+} from './firebase.js?v=20261016';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
 /* admin-import.js (classic script) global: window.AuraImport */
@@ -40,26 +42,23 @@ let orders = [];
 let editingId = null;
 let myRole = 'none'; /* owner | manager | assistant | none */
 
-/* Role → visible tabs (single login panel for everyone) */
-const ROLE_TABS = {
-  owner: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import', 'staff', 'settings'],
-  manager: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import'],
-  assistant: ['orders'],
-};
-const ROLE_BN = { owner: 'মালিক', manager: 'ম্যানেজার', assistant: 'সহকারী', none: '—' };
+/* Tabs from staff doc (owner = all). Suspended → none. */
+const ALL_TABS = ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import', 'staff', 'settings'];
+const ROLE_BN = { owner: 'মালিক', manager: 'ম্যানেজার', assistant: 'সহকারী', custom: 'কাস্টম', none: '—' };
+let myTabs = [];
 
-function applyRole(role) {
+function applyRole(role, tabs) {
   myRole = role;
-  const tabs = ROLE_TABS[role] || [];
+  myTabs = role === 'owner' ? [...ALL_TABS] : (Array.isArray(tabs) ? tabs : []);
   $$('#tabs button[data-tab]').forEach((b) => {
-    b.hidden = !tabs.includes(b.dataset.tab);
+    b.hidden = !myTabs.includes(b.dataset.tab);
   });
   $$('.tab-page').forEach((p) => {
     const t = p.id.replace('tab-', '');
-    if (!tabs.includes(t)) p.hidden = true;
+    if (!myTabs.includes(t)) p.hidden = true;
   });
   /* first visible tab becomes active */
-  const first = tabs[0];
+  const first = myTabs[0];
   $$('#tabs button[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === first));
   $$('.tab-page').forEach((p) => { p.hidden = p.id !== 'tab-' + first; });
   const badge = $('#roleBadge');
@@ -68,9 +67,7 @@ function applyRole(role) {
 
 function can(perm) {
   if (myRole === 'owner') return true;
-  if (myRole === 'manager') return ['products', 'orders', 'reviews', 'newsletter', 'import', 'categories'].includes(perm);
-  if (myRole === 'assistant') return perm === 'orders';
-  return false;
+  return myTabs.includes(perm);
 }
 
 const STAGE_BN = { pending: 'পেন্ডিং', confirmed: 'কনফার্মড', shipped: 'শিপড', delivered: 'ডেলিভার্ড', cancelled: 'বাতিল' };
@@ -106,14 +103,16 @@ function initAuth() {
       if (role === 'none') {
         $('#loginScreen').hidden = false;
         $('#panel').hidden = true;
-        $('#loginErr').textContent = 'এই অ্যাকাউন্টের admin/staff access নেই। মালিকের সাথে যোগাযোগ করুন।';
+        $('#loginErr').textContent = rr.suspended
+          ? 'এই অ্যাকাউন্টটি suspend করা হয়েছে। মালিকের সাথে যোগাযোগ করুন।'
+          : 'এই অ্যাকাউন্টের admin/staff access নেই। মালিকের সাথে যোগাযোগ করুন।';
         await signOut();
         return;
       }
       $('#loginScreen').hidden = true;
       $('#panel').hidden = false;
       $('#adminEmail').textContent = (user.email || '') + ' (' + (ROLE_BN[role] || role) + ')';
-      applyRole(role);
+      applyRole(role, rr.tabs);
       loadAll();
     } else {
       $('#panel').hidden = true;
@@ -216,12 +215,16 @@ function renderProducts() {
   $('#prodTable tbody').innerHTML = rows.map((p) => {
     const img = (p.images && p.images[0]) || p.img || '';
     const vis = p.visible !== false;
+    const sizes = p.sizes || [];
+    const stockTxt = sizes.length
+      ? sizes.map((s) => `${esc(s)}:${sizeQty(p, s)}`).join(' · ')
+      : String(totalStock(p));
     return `<tr>
       <td><img class="thumb" src="${esc(img)}" alt="" onerror="this.style.visibility='hidden'"></td>
       <td><b>${esc(p.nameBn || p.nameEn)}</b><br><small class="muted">${esc(p.sku || '')} · ${esc(p.id)}</small></td>
       <td>${fmt(p.price)}${p.oldPrice > p.price ? `<br><small class="muted"><s>${fmt(p.oldPrice)}</s></small>` : ''}</td>
-      <td>${esc(p.stock)}</td>
-      <td><span class="pill ${vis ? 'ok' : 'no'}">${vis ? 'চালু' : 'বন্ধ'}</span></td>
+      <td><small>${stockTxt}</small></td>
+      <td><button class="pill ${vis ? 'ok' : 'no'} vis-toggle" data-vis="${esc(p.id)}" title="চালু/বন্ধ করুন">${vis ? 'চালু' : 'বন্ধ'}</button></td>
       <td><div class="row-actions">
         <button class="btn btn-outline btn-sm" data-edit="${esc(p.id)}">এডিট</button>
         <button class="btn btn-outline btn-sm" data-del="${esc(p.id)}">ডিলিট</button>
@@ -230,14 +233,29 @@ function renderProducts() {
   }).join('') || '<tr><td colspan="6" style="text-align:center; color:var(--muted)">কোনো প্রোডাক্ট নেই।</td></tr>';
   $$('#prodTable [data-edit]').forEach((b) => b.addEventListener('click', () => openProdForm(b.dataset.edit)));
   $$('#prodTable [data-del]').forEach((b) => b.addEventListener('click', () => delProduct(b.dataset.del)));
+  $$('#prodTable [data-vis]').forEach((b) => b.addEventListener('click', () => toggleVisible(b.dataset.vis)));
+}
+
+async function toggleVisible(id) {
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+  const nv = !(p.visible !== false);
+  const r = await saveProduct({ ...p, visible: nv });
+  if (r.ok) { p.visible = nv; renderProducts(); toast(nv ? 'চালু হয়েছে।' : 'বন্ধ হয়েছে।'); }
+  else toast('ব্যর্থ: ' + (r.error || ''));
 }
 
 async function delProduct(id) {
   const p = products.find((x) => x.id === id);
   if (!confirm(`"${p ? (p.nameBn || p.nameEn) : id}" ডিলিট করবেন?`)) return;
+  /* Storage-এর ছবিগুলোও মুছে জায়গা ফাঁকা করি (best-effort) */
+  const imgs = p ? ((p.images || []).concat(p.img ? [p.img] : [])) : [];
   const r = await deleteProduct(id);
-  if (r.ok) { toast('ডিলিট হয়েছে।'); await loadProducts(); }
-  else toast('ডিলিট ব্যর্থ: ' + (r.error || ''));
+  if (r.ok) {
+    toast('ডিলিট হয়েছে।');
+    imgs.forEach((u) => deleteProductImage(u));
+    await loadProducts();
+  } else toast('ডিলিট ব্যর্থ: ' + (r.error || ''));
 }
 
 function mainOptions(sel) {
@@ -260,9 +278,8 @@ function openProdForm(id) {
   $('#pfSub').innerHTML = subOptions(p ? p.main : $('#pfMain').value, p ? p.sub : '');
   $('#pfPrice').value = p ? (p.price ?? '') : '';
   $('#pfOldPrice').value = p && p.oldPrice > p.price ? p.oldPrice : '';
-  $('#pfStock').value = p ? (p.stock ?? '') : '';
   $('#pfTag').value = p ? (p.tag || '') : '';
-  $('#pfSizes').value = p ? (p.sizes || []).join(', ') : 'M, L, XL, XXL';
+  renderSizeRows(p);
   $('#pfVisible').checked = p ? p.visible !== false : true;
   $('#pfDescBn').value = p ? (p.descBn || '') : '';
   $('#pfDescEn').value = p ? (p.descEn || '') : '';
@@ -272,6 +289,98 @@ function openProdForm(id) {
   imgs.forEach((u) => addImgRow(u));
   $('#prodForm').hidden = false;
   $('#prodForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- size-wise stock editor ---------- */
+function renderSizeRows(p) {
+  const box = $('#sizeRows');
+  box.innerHTML = '';
+  const sizes = p && p.sizes && p.sizes.length ? p.sizes : (p ? [] : ['M', 'L', 'XL', 'XXL']);
+  sizes.forEach((s) => addSizeRow(s, p ? sizeQty(p, s) : ''));
+  /* সাইজ না থাকলে সাধারণ স্টক */
+  $('#pfStockGen').value = p ? (sizes.length ? '' : (p.stock ?? '')) : '';
+  syncTotalStock();
+}
+function addSizeRow(size, qty) {
+  const div = document.createElement('div');
+  div.className = 'size-row-edit';
+  div.innerHTML = `<input class="sz-name" placeholder="সাইজ (M)" value="${esc(size || '')}">
+    <input class="sz-qty" type="number" min="0" placeholder="পিস" value="${qty === '' ? '' : (Number(qty) || 0)}">
+    <button type="button" class="btn btn-outline btn-sm">✕</button>`;
+  div.querySelector('.sz-qty').addEventListener('input', syncTotalStock);
+  div.querySelector('button').addEventListener('click', () => { div.remove(); syncTotalStock(); });
+  $('#sizeRows').appendChild(div);
+}
+function collectSizes() {
+  const sizes = [], sizeStock = {};
+  $$('#sizeRows .size-row-edit').forEach((r) => {
+    const name = r.querySelector('.sz-name').value.trim();
+    if (!name) return;
+    const q = Number(r.querySelector('.sz-qty').value);
+    sizes.push(name);
+    sizeStock[name] = q >= 0 ? q : 0;
+  });
+  return { sizes, sizeStock };
+}
+function syncTotalStock() {
+  const { sizeStock } = collectSizes();
+  const total = Object.values(sizeStock).reduce((s, q) => s + q, 0);
+  const el = $('#pfStock');
+  if (el) el.value = total;
+  const hint = $('#stockTotalHint');
+  if (hint) hint.textContent = 'মোট: ' + total + ' পিস';
+}
+
+/* ---------- gallery upload: compress → Storage → URL row ---------- */
+function compressImage(file, maxDim = 1200, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width: w, height: h } = img;
+      if (w > maxDim || h > maxDim) {
+        const r = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * r); h = Math.round(h * r);
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob((b) => b ? resolve(b) : reject(new Error('compress-failed')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load-failed')); };
+    img.src = url;
+  });
+}
+
+async function handleImgFiles(e) {
+  const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+  const prev = $('#imgUploadPrev');
+  const pid = editingId || 'new_' + Date.now();
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) { toast('ছবি ফাইল দিন।'); continue; }
+    const chip = document.createElement('div');
+    chip.className = 'up-chip';
+    chip.textContent = '⏳ ' + file.name.slice(0, 18);
+    prev.appendChild(chip);
+    try {
+      const blob = await compressImage(file);
+      const up = await uploadProductImage(new File([blob], 'img.jpg', { type: 'image/jpeg' }), pid);
+      if (up.ok) {
+        chip.remove();
+        addImgRow(up.url);
+        toast('ছবি আপলোড হয়েছে।');
+      } else {
+        chip.textContent = '❌ ' + (up.error || 'ব্যর্থ');
+        setTimeout(() => chip.remove(), 4000);
+      }
+    } catch {
+      chip.textContent = '❌ ব্যর্থ';
+      setTimeout(() => chip.remove(), 4000);
+    }
+  }
 }
 
 function addImgRow(url) {
@@ -293,16 +402,23 @@ async function saveProdForm() {
   const nameBn = $('#pfNameBn').value.trim();
   const nameEn = $('#pfNameEn').value.trim();
   const price = Number($('#pfPrice').value);
-  const stock = Number($('#pfStock').value);
   const err = $('#prodErr');
   if (!nameBn || !nameEn) { err.textContent = 'বাংলা ও English নাম দিন।'; return; }
   if (!(price >= 0)) { err.textContent = 'সঠিক দাম দিন।'; return; }
-  if (!(stock >= 0)) { err.textContent = 'সঠিক স্টক দিন।'; return; }
   const main = $('#pfMain').value, sub = $('#pfSub').value;
   if (!main || !sub) { err.textContent = 'ক্যাটাগরি নির্বাচন করুন।'; return; }
   const images = $$('#imgRows input').map((i) => i.value.trim()).filter(Boolean);
-  if (!images.length) { err.textContent = 'কমপক্ষে ১টি ছবির URL দিন।'; return; }
+  if (!images.length) { err.textContent = 'কমপক্ষে ১টি ছবি দিন (গ্যালারি বা URL)।'; return; }
   const oldPrice = Number($('#pfOldPrice').value) || 0;
+  const { sizes, sizeStock } = collectSizes();
+  let stock;
+  if (sizes.length) {
+    stock = Object.values(sizeStock).reduce((s, q) => s + q, 0);
+  } else {
+    /* সাইজ নেই — সাধারণ স্টক */
+    stock = Number($('#pfStockGen').value);
+    if (!(stock >= 0)) { err.textContent = 'সঠিক স্টক দিন।'; return; }
+  }
   const p = {
     id: editingId || nextId(),
     sku: $('#pfSku').value.trim(),
@@ -310,7 +426,7 @@ async function saveProdForm() {
     price, oldPrice: oldPrice > price ? oldPrice : 0,
     img: images[0], images,
     descBn: $('#pfDescBn').value.trim(), descEn: $('#pfDescEn').value.trim(),
-    sizes: $('#pfSizes').value.split(',').map((s) => s.trim()).filter(Boolean),
+    sizes, sizeStock,
     stock, tag: $('#pfTag').value,
     visible: $('#pfVisible').checked,
   };
@@ -334,6 +450,8 @@ function initProducts() {
   $('#prodCancel').addEventListener('click', () => { $('#prodForm').hidden = true; editingId = null; });
   $('#prodSave').addEventListener('click', saveProdForm);
   $('#addImgRow').addEventListener('click', () => addImgRow(''));
+  $('#addSizeRow').addEventListener('click', () => addSizeRow('', ''));
+  $('#imgFile').addEventListener('change', handleImgFiles);
   $('#pfMain').addEventListener('change', () => { $('#pfSub').innerHTML = subOptions($('#pfMain').value, ''); });
   $('#seedImportBtn').addEventListener('click', async () => {
     if (!confirm('৫৫টি seed প্রোডাক্ট Firestore-এ আপলোড করবেন?')) return;
@@ -372,24 +490,38 @@ async function saveCategories() {
 function orderCard(o) {
   const items = (o.items || []).map((i) => `${esc(i.name || i.id)} × ${i.qty}${i.size ? ' (' + esc(i.size) + ')' : ''} — ${fmt(i.price * i.qty)}`).join('<br>');
   const pay = PAY_BN[(o.pay || '').toLowerCase()] || esc(o.pay || '');
-  return `<div class="order-card" data-oid="${esc(o.id)}">
-    <div class="order-head">
+  return `<div class="order-card compact" data-oid="${esc(o.id)}">
+    <div class="order-head compact-head">
+      <button class="expand-btn" data-expand="${esc(o.id)}" aria-label="বিস্তারিত">▸</button>
       <b>${esc(o.orderId || o.id)}</b>
+      <span class="oc-cust">${esc(o.name || '')}</span>
+      <span class="oc-total">${fmt(o.total)}</span>
       <select class="status-select st-${esc(o.stage || 'pending')}" data-stage="${esc(o.id)}">
         ${Object.entries(STAGE_BN).map(([k, v]) => `<option value="${k}" ${o.stage === k ? 'selected' : ''}>${v}</option>`).join('')}
       </select>
     </div>
-    <div class="order-meta">
-      <span><b>${esc(o.name || '')}</b> · ${esc(o.phone || '')}</span>
-      <span>${esc(o.district || '')} — ${esc(o.address || '')}</span>
-      <span>পেমেন্ট: ${pay}${o.trxId ? ' · TrxID: <b>' + esc(o.trxId) + '</b>' : ''}${o.senderNumber ? ' · নম্বর: <b>' + esc(o.senderNumber) + '</b>' : ''}</span>
-      <span>${fmtDate(o.createdAt)}</span>
+    <div class="order-details" hidden>
+      <div class="order-meta">
+        <span>📞 ${esc(o.phone || '')}</span>
+        <span>${esc(o.district || '')} — ${esc(o.address || '')}</span>
+        <span>পেমেন্ট: ${pay}${o.trxId ? ' · TrxID: <b>' + esc(o.trxId) + '</b>' : ''}${o.senderNumber ? ' · নম্বর: <b>' + esc(o.senderNumber) + '</b>' : ''}</span>
+        <span>${fmtDate(o.createdAt)}</span>
+      </div>
+      <div class="order-items">${items}</div>
+      <div class="order-foot"><span class="muted">ডেলিভারি ${fmt(o.delivery)}</span></div>
     </div>
-    <div class="order-items">${items}</div>
-    <div class="order-foot"><span class="total">${fmt(o.total)}</span><span class="muted">ডেলিভারি ${fmt(o.delivery)}</span></div>
   </div>`;
 }
 function bindOrderCards(root) {
+  /* expand/collapse */
+  root.querySelectorAll('[data-expand]').forEach((b) => b.addEventListener('click', () => {
+    const card = b.closest('.order-card');
+    const det = card.querySelector('.order-details');
+    const open = det.hidden;
+    det.hidden = !open;
+    b.textContent = open ? '▾' : '▸';
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }));
   $$('[data-stage]', root).forEach((sel) => sel.addEventListener('change', async () => {
     const r = await updateOrderStatus(sel.dataset.stage, sel.value);
     if (r.ok) {
@@ -480,6 +612,8 @@ function renderSettings() {
   v('#sfOutside', settings.deliveryOutside); v('#sfFreeAbove', settings.freeAbove);
   v('#sfWhatsapp', settings.whatsapp); v('#sfPhone', settings.phone);
   v('#sfEmail', settings.email); v('#sfAddress', settings.address);
+  const soc = settings.social || {};
+  v('#sfFb', soc.facebook); v('#sfIg', soc.instagram); v('#sfYt', soc.youtube);
 }
 async function saveSettingsForm() {
   const err = $('#settingsErr');
@@ -492,6 +626,10 @@ async function saveSettingsForm() {
     deliveryOutside: num('#sfOutside'), freeAbove: num('#sfFreeAbove'),
     whatsapp: $('#sfWhatsapp').value.trim(), phone: $('#sfPhone').value.trim(),
     email: $('#sfEmail').value.trim(), address: $('#sfAddress').value.trim(),
+    social: {
+      facebook: $('#sfFb').value.trim(), instagram: $('#sfIg').value.trim(),
+      youtube: $('#sfYt').value.trim(),
+    },
   };
   err.textContent = '';
   $('#settingsSave').disabled = true;
@@ -503,7 +641,21 @@ async function saveSettingsForm() {
 
 /* ================= INIT ================= */
 /* ================= STAFF ================= */
-const STAFF_ROLE_BN = { manager: 'ম্যানেজার', assistant: 'সহকারী' };
+const STAFF_ROLE_BN = { manager: 'ম্যানেজার', assistant: 'সহকারী', custom: 'কাস্টম' };
+let editingStaffUid = null;
+
+function staffFormTabs() {
+  return $$('#stTabsBox [data-ptab]:checked').map((c) => c.dataset.ptab);
+}
+function setStaffFormTabs(tabs) {
+  $$('#stTabsBox [data-ptab]').forEach((c) => { c.checked = tabs.includes(c.dataset.ptab); });
+}
+function applyRolePreset() {
+  const role = $('#stRole').value;
+  if (role === 'custom') return;
+  setStaffFormTabs(tabsForRole(role));
+  $('#stOrderFull').checked = orderFullForRole(role);
+}
 
 async function loadStaff() {
   const tb = $('#stTable tbody');
@@ -511,33 +663,105 @@ async function loadStaff() {
   const r = await fetchStaffList();
   if (!r.ok) { tb.innerHTML = '<tr><td colspan="4" class="err">লোড ব্যর্থ।</td></tr>'; return; }
   if (!r.staff.length) { tb.innerHTML = '<tr><td colspan="4" class="muted">কোনো স্টাফ নেই।</td></tr>'; return; }
-  tb.innerHTML = r.staff.map((s) => `<tr>
-    <td>${esc(s.email || '—')}</td><td class="mono small">${esc(s.uid)}</td>
+  tb.innerHTML = r.staff.map((s) => {
+    const susp = s.suspended === true;
+    const tabs = Array.isArray(s.tabs) ? s.tabs : tabsForRole(s.role);
+    return `<tr class="${susp ? 'suspended-row' : ''}">
+    <td>${esc(s.email || '—')}<br><small class="muted">${esc(tabs.join(', ') || '—')}</small></td>
     <td>${esc(STAFF_ROLE_BN[s.role] || s.role || '—')}</td>
-    <td><button class="btn btn-outline btn-sm" data-delstaff="${esc(s.uid)}">মুছুন</button></td>
-  </tr>`).join('');
+    <td>${susp ? '<span class="pill no">সাসপেন্ড</span>' : '<span class="pill ok">সক্রিয়</span>'}</td>
+    <td><div class="row-actions">
+      <button class="btn btn-outline btn-sm" data-editstaff="${esc(s.uid)}">এডিট</button>
+      <button class="btn btn-outline btn-sm" data-suspstaff="${esc(s.uid)}">${susp ? 'চালু' : 'সাসপেন্ড'}</button>
+      <button class="btn btn-outline btn-sm" data-delstaff="${esc(s.uid)}">মুছুন</button>
+    </div></td>
+  </tr>`;
+  }).join('');
   tb.querySelectorAll('[data-delstaff]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('এই স্টাফের access বাতিল করবেন?')) return;
+    if (!confirm('এই স্টাফের access বাতিল করবেন? (Auth অ্যাকাউন্ট থেকে যাবে)')) return;
     const dr = await removeStaff(b.dataset.delstaff);
     if (dr.ok) { toast('মুছে ফেলা হয়েছে।'); loadStaff(); }
     else toast('ব্যর্থ: ' + (dr.error || ''));
   }));
+  tb.querySelectorAll('[data-suspstaff]').forEach((b) => b.addEventListener('click', async () => {
+    const s = (await fetchStaffList()).staff.find((x) => x.uid === b.dataset.suspstaff);
+    const ns = !(s && s.suspended === true);
+    if (!confirm(ns ? 'এই স্টাফকে suspend করবেন? লগইন বন্ধ হয়ে যাবে।' : 'Suspend তুলে আবার চালু করবেন?')) return;
+    const r2 = await saveStaff(b.dataset.suspstaff, { suspended: ns });
+    if (r2.ok) { toast(ns ? 'Suspend হয়েছে।' : 'আবার চালু হয়েছে।'); loadStaff(); }
+    else toast('ব্যর্থ: ' + (r2.error || ''));
+  }));
+  tb.querySelectorAll('[data-editstaff]').forEach((b) => b.addEventListener('click', async () => {
+    const s = (await fetchStaffList()).staff.find((x) => x.uid === b.dataset.editstaff);
+    if (!s) return;
+    editingStaffUid = s.uid;
+    $('#stEmail').value = s.email || '';
+    $('#stEmail').disabled = true;
+    $('#stPass').value = '';
+    $('#stPass').placeholder = '(বদলাতে চাইলে নতুন পাসওয়ার্ড)';
+    const tabs = Array.isArray(s.tabs) ? s.tabs : tabsForRole(s.role);
+    setStaffFormTabs(tabs);
+    $('#stRole').value = ['manager', 'assistant'].includes(s.role) ? s.role : 'custom';
+    $('#stOrderFull').checked = s.orderFull !== undefined ? !!s.orderFull : orderFullForRole(s.role);
+    $('#stAdd').textContent = 'আপডেট করুন';
+    $('#stCancelEdit').hidden = false;
+    $('#stAdd').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }));
+}
+
+function resetStaffForm() {
+  editingStaffUid = null;
+  $('#stEmail').value = ''; $('#stEmail').disabled = false;
+  $('#stPass').value = ''; $('#stPass').placeholder = 'কমপক্ষে ৬ অক্ষর';
+  $('#stRole').value = 'manager';
+  applyRolePreset();
+  $('#stAdd').textContent = 'স্টাফ অ্যাকাউন্ট বানান';
+  $('#stCancelEdit').hidden = true;
+  $('#stErr').textContent = '';
 }
 
 function initStaff() {
+  $('#stRole').addEventListener('change', applyRolePreset);
+  $$('#stTabsBox [data-ptab]').forEach((c) => c.addEventListener('change', () => {
+    /* হাতে বদলালে custom */
+    $('#stRole').value = 'custom';
+  }));
+  $('#stCancelEdit').addEventListener('click', resetStaffForm);
+  applyRolePreset();
   $('#stAdd').addEventListener('click', async () => {
     const err = $('#stErr');
-    const email = $('#stEmail').value.trim(), uid = $('#stUid').value.trim(), role = $('#stRole').value;
+    const email = $('#stEmail').value.trim().toLowerCase();
+    const pass = $('#stPass').value;
+    const role = $('#stRole').value;
+    const tabs = staffFormTabs();
+    const orderFull = $('#stOrderFull').checked;
     err.textContent = '';
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'সঠিক ইমেইল দিন।'; return; }
-    if (!uid) { err.textContent = 'Firebase UID দিন।'; return; }
-    if (!['manager', 'assistant'].includes(role)) { err.textContent = 'Role বেছে নিন।'; return; }
-    const r = await saveStaff(uid, { email: email.toLowerCase(), role });
-    if (r.ok) {
-      toast('স্টাফ যোগ হয়েছে।');
-      $('#stEmail').value = ''; $('#stUid').value = '';
-      loadStaff();
-    } else err.textContent = 'ব্যর্থ: ' + (r.error || '');
+    if (!tabs.length) { err.textContent = 'কমপক্ষে ১টি অনুমতি টিক দিন।'; return; }
+    $('#stAdd').disabled = true;
+    try {
+      if (editingStaffUid) {
+        /* update permissions (password change not supported here) */
+        const r = await saveStaff(editingStaffUid, { role, tabs, orderFull });
+        if (!r.ok) throw new Error(r.error || 'ব্যর্থ');
+        toast('আপডেট হয়েছে।');
+        resetStaffForm(); loadStaff();
+      } else {
+        if (!pass || pass.length < 6) { err.textContent = 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।'; return; }
+        /* 1. Firebase Auth account (secondary app — current session নিরাপদ) */
+        const cr = await createStaffAccount(email, pass);
+        if (!cr.ok) throw new Error(cr.error || (cr.demo ? 'Firebase কানেক্ট হয়নি।' : 'অ্যাকাউন্ট বানানো যায়নি।'));
+        /* 2. staff doc with tabs */
+        const r = await saveStaff(cr.uid, { email, role, tabs, orderFull, suspended: false });
+        if (!r.ok) throw new Error(r.error || 'Staff ডকুমেন্ট সেভ হয়নি।');
+        toast('স্টাফ অ্যাকাউন্ট তৈরি।');
+        resetStaffForm(); loadStaff();
+      }
+    } catch (e) {
+      err.textContent = 'ব্যর্থ: ' + (e.message || e);
+    } finally {
+      $('#stAdd').disabled = false;
+    }
   });
 }
 

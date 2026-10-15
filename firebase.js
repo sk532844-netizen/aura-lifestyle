@@ -40,6 +40,36 @@ const C = {
 /* Owner UID — firestore.rules-এর ownerUid()-এর সাথে মিলিয়ে রাখুন */
 export const OWNER_UID = 'SNSSuBuLbgRSQy4moDwz6rWnYmv1';
 
+/* ---------- size-wise stock ---------- */
+/* sizeStock: { M: 5, L: 0 } — না থাকলে legacy `stock` fallback (সব সাইজে সমান) */
+export function sizeQty(p, size) {
+  if (!p) return 0;
+  const ss = p.sizeStock;
+  if (ss && typeof ss === 'object' && size != null && ss[size] !== undefined) return Number(ss[size]) || 0;
+  if (p.stock !== undefined && p.stock !== null) return Number(p.stock) || 0;
+  return Infinity; /* stock info নেই — ব্লক করবো না */
+}
+export function totalStock(p) {
+  if (!p) return 0;
+  if (p.sizeStock && typeof p.sizeStock === 'object' && Object.keys(p.sizeStock).length)
+    return Object.values(p.sizeStock).reduce((s, q) => s + (Number(q) || 0), 0);
+  return Number(p.stock) || 0;
+}
+export function isOutOfStock(p) {
+  if (!p || p.visible === false) return false;
+  const sizes = p.sizes || [];
+  if (!sizes.length) return totalStock(p) <= 0;
+  return sizes.every((s) => sizeQty(p, s) <= 0);
+}
+
+/* ---------- role → tab presets (staff doc-এ tabs না থাকলে fallback) ---------- */
+export const ROLE_TABS_PRESET = {
+  manager: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import'],
+  assistant: ['orders'],
+};
+export function tabsForRole(role) { return [...(ROLE_TABS_PRESET[role] || [])]; }
+export function orderFullForRole(role) { return role === 'manager'; }
+
 let _fb = null;      /* { app, auth, db, aFns, fFns } */
 let _fbPromise = null; /* init চলাকালীন concurrent call-রা একই promise await করে (race fix) */
 let _initTried = false;
@@ -59,18 +89,22 @@ async function fb() {
   if (!isConfigured()) return null;
   _fbPromise = (async () => {
     try {
-      const [appMod, authMod, fsMod] = await Promise.all([
+      const [appMod, authMod, fsMod, stMod] = await Promise.all([
         import(`${SDK}/firebase-app.js`),
         import(`${SDK}/firebase-auth.js`),
         import(`${SDK}/firebase-firestore.js`),
+        import(`${SDK}/firebase-storage.js`),
       ]);
       const app = appMod.initializeApp(FIREBASE_CONFIG);
       _fb = {
         app,
         auth: authMod.getAuth(app),
         db: fsMod.getFirestore(app),
+        storage: stMod.getStorage(app),
         aFns: authMod,
         fFns: fsMod,
+        sFns: stMod,
+        appMod,
       };
       return _fb;
     } catch (e) {
@@ -412,17 +446,89 @@ export async function deleteReview(id) {
 
 export async function fetchMyRole() {
   const f = await fb();
-  if (!f) return { ok: false, demo: true, role: 'none' };
+  if (!f) return { ok: false, demo: true, role: 'none', tabs: [], suspended: false };
   const user = f.auth.currentUser;
-  if (!user) return { ok: true, role: 'none' };
-  if (user.uid === OWNER_UID) return { ok: true, role: 'owner' };
+  if (!user) return { ok: true, role: 'none', tabs: [], suspended: false };
+  if (user.uid === OWNER_UID) return { ok: true, role: 'owner', tabs: ['*'], suspended: false };
   try {
     const snap = await f.fFns.getDoc(f.fFns.doc(f.db, C.staff, user.uid));
-    const role = snap.exists() ? (snap.data().role || 'none') : 'none';
-    return { ok: true, role: ['manager', 'assistant'].includes(role) ? role : 'none' };
+    if (!snap.exists()) return { ok: true, role: 'none', tabs: [], suspended: false };
+    const d = snap.data();
+    if (d.suspended === true) return { ok: true, role: 'none', tabs: [], suspended: true };
+    const role = d.role || 'none';
+    const tabs = Array.isArray(d.tabs) ? d.tabs : tabsForRole(role);
+    const orderFull = d.orderFull !== undefined ? !!d.orderFull : orderFullForRole(role);
+    return { ok: true, role: ['manager', 'assistant'].includes(role) ? role : 'none', tabs, orderFull, suspended: false };
   } catch (e) {
-    return { ok: false, role: 'none', error: String((e && e.message) || e) };
+    return { ok: false, role: 'none', tabs: [], suspended: false, error: String((e && e.message) || e) };
   }
+}
+
+/* Owner প্যানেল থেকে সরাসরি staff auth account বানানো (secondary app — main session বদলায় না) */
+export async function createStaffAccount(email, password) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  let app2 = null;
+  try {
+    app2 = f.appMod.initializeApp(
+      { apiKey: FIREBASE_CONFIG.apiKey, authDomain: FIREBASE_CONFIG.authDomain, projectId: FIREBASE_CONFIG.projectId },
+      'staff-creator-' + Date.now(),
+    );
+    const auth2 = f.aFns.getAuth(app2);
+    const cred = await f.aFns.createUserWithEmailAndPassword(auth2, email.trim(), password);
+    const uid = cred.user.uid;
+    await f.aFns.signOut(auth2);
+    return { ok: true, uid };
+  } catch (e) {
+    return { ok: false, error: friendlyAuthError(e) };
+  } finally {
+    if (app2) { try { await f.appMod.deleteApp(app2); } catch { /* ignore */ } }
+  }
+}
+
+/* ================= STORAGE (product image direct upload) ================= */
+
+function friendlyStorageError(e) {
+  const code = (e && e.code) || '';
+  if (code === 'storage/unauthorized') return 'আপলোডের অনুমতি নেই।';
+  if (code === 'storage/canceled') return 'আপলোড বাতিল হয়েছে।';
+  if (code === 'storage/unknown' || code === 'storage/bucket-not-found')
+    return 'Storage চালু নেই — Firebase Console → Build → Storage → Get started চাপুন।';
+  return 'আপলোড ব্যর্থ হয়েছে। আবার চেষ্টা করুন।';
+}
+
+/* file → Storage products/{productId}/… → download URL */
+export async function uploadProductImage(file, productId) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const path = `products/${productId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const ref = f.sFns.ref(f.storage, path);
+    await f.sFns.uploadBytes(ref, file, { contentType: file.type || 'image/jpeg' });
+    const url = await f.sFns.getDownloadURL(ref);
+    return { ok: true, url, path };
+  } catch (e) {
+    return { ok: false, error: friendlyStorageError(e) };
+  }
+}
+
+/* Storage URL/path থেকে ফাইল মোছা (best-effort) */
+export async function deleteProductImage(urlOrPath) {
+  const f = await fb();
+  if (!f || !urlOrPath) return { ok: false };
+  try {
+    let ref;
+    if (/^products\//.test(urlOrPath)) ref = f.sFns.ref(f.storage, urlOrPath);
+    else {
+      const m = String(urlOrPath).match(/\/o\/([^?]+)/);
+      const path = m ? decodeURIComponent(m[1]) : null;
+      if (!path || !/^products\//.test(path)) return { ok: false };
+      ref = f.sFns.ref(f.storage, path);
+    }
+    await f.sFns.deleteObject(ref);
+    return { ok: true };
+  } catch { return { ok: false }; }
 }
 
 export async function fetchStaffList() {

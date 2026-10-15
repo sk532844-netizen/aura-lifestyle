@@ -198,6 +198,7 @@ img { max-width: 100%; display: block; }
 .size-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
 .size-btn { border: 1.5px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 16px; font-weight: 700; }
 .size-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.size-btn.sold-out { opacity: .45; text-decoration: line-through; cursor: not-allowed; background: #f5f5f5; }
 .qty-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
 .qty-row button { width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid var(--line); background: #fff; font-size: 18px; font-weight: 700; }
 .qty-row b { font-size: 18px; min-width: 28px; text-align: center; }
@@ -292,6 +293,10 @@ img { max-width: 100%; display: block; }
 .footer .f-brand span { color: var(--gold); }
 .footer-bottom { border-top: 1px solid rgba(255, 255, 255, .12); text-align: center; padding: 14px; font-size: 13px; color: #9aa5c2; }
 .pay-badges span { display: inline-block; border: 1px solid rgba(255, 255, 255, .25); border-radius: 8px; padding: 4px 10px; font-size: 12px; margin: 0 4px 6px 0; }
+.social-row { display: flex; gap: 10px; margin-top: 12px; }
+.social-row a { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(201, 162, 39, .15); border: 1px solid rgba(201, 162, 39, .4); transition: transform .15s; }
+.social-row a:hover { transform: scale(1.1); }
+.social-row svg { width: 18px; height: 18px; fill: #c9a227; }
 
 /* ---------- toast ---------- */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--navy); color: #fff; padding: 13px 22px; border-radius: 999px; font-weight: 600; font-size: 14px; z-index: 200; transition: transform .3s; box-shadow: 0 8px 30px rgba(0, 0, 0, .25); max-width: 92vw; text-align: center; }

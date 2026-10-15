@@ -216,6 +216,7 @@ const DEFAULT_SETTINGS = {
   bkash: '01710000000', nagad: '01710000000',
   sections: { hero: true, flashSale: true, combo: true, testimonials: true, bestSellers: true, newArrivals: true },
   hiddenCategories: [], /* main-category slugs hidden from storefront */
+  social: { facebook: '', instagram: '', youtube: '' }, /* footer social icons */
 };
 
 const FALLBACK_IMG = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=800&auto=format&fit=crop';

@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview } from './firebase.js?v=20261015';
-import * as fb from './firebase.js?v=20261015'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261016';
+import * as fb from './firebase.js?v=20261016'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -476,8 +476,10 @@ function prodCard(p) {
   const off = discount(p);
   const name = LANG === 'bn' ? p.nameBn : p.nameEn;
   const wished = wish.includes(p.id);
-  const stockCls = p.stock === 0 ? 'low' : (p.stock <= 5 ? 'low' : 'ok');
-  const stockTxt = p.stock === 0 ? t('outStock') : (p.stock <= 5 ? t('lowStock', { n: p.stock }) : t('inStock'));
+  const oos = isOutOfStock(p);
+  const ts = totalStock(p);
+  const stockCls = oos ? 'low' : (ts <= 5 ? 'low' : 'ok');
+  const stockTxt = oos ? t('outStock') : (ts <= 5 ? t('lowStock', { n: ts }) : t('inStock'));
   return `<article class="prod-card">
     <div class="p-img"><a href="#product/${esc(p.id)}"><img src="${esc(p.img)}" alt="${esc(name)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"></a>
     ${off > 0 ? `<span class="badge-off">-${off}%</span>` : ''}
@@ -487,7 +489,7 @@ function prodCard(p) {
     <div class="stars">${stars(4.5)}</div>
     <div class="price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}</div>
     <div class="stock ${stockCls}">${stockTxt}</div>
-    <button class="add-btn" data-add="${esc(p.id)}" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button></div>
+    <button class="add-btn" data-add="${esc(p.id)}" ${isOutOfStock(p) ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button></div>
   </article>`;
 }
 
@@ -498,7 +500,7 @@ function view404() {
 
 /* ---------------- HOME (compact) ---------------- */
 function viewHome() {
-  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && p.stock > 0 && p.visible !== false).slice(0, 4);
+  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && !isOutOfStock(p) && p.visible !== false).slice(0, 4);
   const best = PRODUCTS.filter((p) => p.tag === 'best-seller' && p.visible !== false).slice(0, 4);
   const mains = visibleMains();
   return `
@@ -616,12 +618,26 @@ function viewProduct(id) {
       <div class="stars">${stars(4.5)} <span style="color:var(--muted); font-size:13px">(4.5)</span></div>
       <div class="pd-price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}${off > 0 ? ` <span style="color:var(--red); font-weight:700">${t('offPct', { n: off })}</span>` : ''}</div>
       <p class="desc">${esc(desc)}</p>
-      <div class="stock ${p.stock === 0 ? 'low' : 'ok'}">${p.stock === 0 ? t('outStock') : (p.stock <= 5 ? t('lowStock', { n: p.stock }) : t('inStock'))}</div>
-      <div style="margin-top:14px"><b>${t('sizeSel')}</b></div>
-      <div class="size-row" id="sizeRow">${p.sizes.map((s) => `<button class="size-btn" data-size="${esc(s)}">${esc(s)}</button>`).join('')}</div>
-      <div class="err" id="sizeErr"></div>
-      <div class="qty-row"><button id="qMinus">−</button><b id="qVal">1</b><button id="qPlus">+</button><span style="color:var(--muted); font-size:13px">${t('qty')}</span></div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap"><button class="btn btn-dark" id="pdAdd" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button><button class="btn" id="pdBuy" ${p.stock === 0 ? 'disabled style="opacity:.5"' : ''}>${t('buyNow')}</button><button class="btn btn-outline" id="pdWish">${wish.includes(p.id) ? t('wished') : t('addWish')}</button></div>
+      ${(() => {
+        const oos = isOutOfStock(p);
+        const ts = totalStock(p);
+        const stockHtml = `<div class="stock ${oos ? 'low' : 'ok'}">${oos ? t('outStock') : (ts <= 5 ? t('lowStock', { n: ts }) : t('inStock'))}</div>`;
+        const sizeHtml = (p.sizes || []).length
+          ? `<div style="margin-top:14px"><b>${t('sizeSel')}</b></div>
+      <div class="size-row" id="sizeRow">${p.sizes.map((s) => {
+            const q = sizeQty(p, s);
+            const dis = q <= 0;
+            return `<button class="size-btn${dis ? ' sold-out' : ''}" data-size="${esc(s)}" ${dis ? 'disabled' : ''}>${esc(s)}${dis ? ' ✕' : ''}</button>`;
+          }).join('')}</div>
+      <div class="err" id="sizeErr"></div>`
+          : '';
+        const btns = oos
+          ? `<div style="display:flex; gap:10px; flex-wrap:wrap"><button class="btn btn-outline" id="pdWish">${wish.includes(p.id) ? t('wished') : t('addWish')}</button></div>
+      <p class="muted" style="font-size:13px; margin-top:8px">${LANG === 'bn' ? 'স্টক শেষ — দাম দেখা যাবে, wishlist-এ রাখা যাবে।' : 'Out of stock — price visible, can wishlist.'}</p>`
+          : `<div class="qty-row"><button id="qMinus">−</button><b id="qVal">1</b><button id="qPlus">+</button><span style="color:var(--muted); font-size:13px">${t('qty')}</span></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap"><button class="btn btn-dark" id="pdAdd">${t('addCart')}</button><button class="btn" id="pdBuy">${t('buyNow')}</button><button class="btn btn-outline" id="pdWish">${wish.includes(p.id) ? t('wished') : t('addWish')}</button></div>`;
+        return stockHtml + sizeHtml + btns;
+      })()}
       <div class="order-alt"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/${esc(SETTINGS.whatsapp)}?text=${waText}">${t('waOrder')}</a></div>
       <div class="meta-box">
         <div>${t('metaDelivery')}</div>
@@ -642,10 +658,12 @@ function cartCount() { return cart.reduce((s, i) => s + i.qty, 0); }
 
 function addToCart(id, qty, size) {
   const p = prodById(id);
-  if (!p || p.stock === 0) return;
+  if (!p || isOutOfStock(p)) return;
+  const avail = size ? sizeQty(p, size) : totalStock(p);
+  if (avail <= 0) return;
   const ex = cart.find((i) => i.id === id && i.size === (size || ''));
-  if (ex) ex.qty = Math.min(ex.qty + qty, p.stock);
-  else cart.push({ id, qty, size: size || '' });
+  if (ex) ex.qty = Math.min(ex.qty + qty, avail === Infinity ? 99 : avail);
+  else cart.push({ id, qty: Math.min(qty, avail === Infinity ? 99 : avail), size: size || '' });
   saveLS('aura_cart', cart);
   updateBadges();
   toast(t('addedToast', { n: LANG === 'bn' ? p.nameBn : p.nameEn }));
@@ -1070,10 +1088,11 @@ bindDynamic = function () {
       if (main) main.src = th.dataset.src;
       $$('.pd-thumb').forEach((x) => x.classList.toggle('on', x === th));
     }));
-    $('#qMinus').addEventListener('click', () => { qty = Math.max(1, qty - 1); $('#qVal').textContent = qty; });
-    $('#qPlus').addEventListener('click', () => { qty = Math.min(99, qty + 1); $('#qVal').textContent = qty; });
-    $('#pdAdd').addEventListener('click', () => { if (!selSize && prodById(pid)?.sizes?.length) { $('#sizeErr').textContent = t('sizeErr'); return; } addToCart(pid, qty, selSize); });
-    $('#pdBuy').addEventListener('click', () => { if (!selSize && prodById(pid)?.sizes?.length) { $('#sizeErr').textContent = t('sizeErr'); return; } addToCart(pid, qty, selSize); location.hash = '#checkout'; });
+    const qMinus = $('#qMinus'), qPlus = $('#qPlus'), pdAdd = $('#pdAdd'), pdBuy = $('#pdBuy');
+    if (qMinus) qMinus.addEventListener('click', () => { qty = Math.max(1, qty - 1); $('#qVal').textContent = qty; });
+    if (qPlus) qPlus.addEventListener('click', () => { qty = Math.min(99, qty + 1); $('#qVal').textContent = qty; });
+    if (pdAdd) pdAdd.addEventListener('click', () => { if (!selSize && prodById(pid)?.sizes?.length) { $('#sizeErr').textContent = t('sizeErr'); return; } addToCart(pid, qty, selSize); });
+    if (pdBuy) pdBuy.addEventListener('click', () => { if (!selSize && prodById(pid)?.sizes?.length) { $('#sizeErr').textContent = t('sizeErr'); return; } addToCart(pid, qty, selSize); location.hash = '#checkout'; });
     $('#pdWish').addEventListener('click', () => toggleWish(pid));
     $('#shareCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.href); toast(t('linkCopied')); } catch { toast(t('linkCopyFail')); } });
     loadReviews(pid);
@@ -1246,7 +1265,25 @@ function applyStaticI18n() {
   if (il) il.innerHTML = `<a href="#about">${t('fAbout')}</a><a href="#track">${t('track')}</a><a href="#delivery">${t('dlT')}</a><a href="#returns">${t('rtT')}</a><a href="#privacy">${t('prT')}</a><a href="#terms">${t('tmT')}</a>`;
   const pb = $('#payBadges');
   if (pb) pb.innerHTML = `<span>${t('payCOD')}</span><span>bKash</span><span>Nagad</span>`;
+  renderSocial();
   buildDrawer();
+}
+
+/* ---------- footer social icons (from Settings → সোশ্যাল মিডিয়া) ---------- */
+function renderSocial() {
+  const row = $('#socialRow');
+  if (!row) return;
+  const soc = (SETTINGS && SETTINGS.social) || {};
+  const icons = {
+    facebook: '<svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
+    instagram: '<svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>',
+    youtube: '<svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+  };
+  const names = { facebook: 'Facebook', instagram: 'Instagram', youtube: 'YouTube' };
+  row.innerHTML = ['facebook', 'instagram', 'youtube']
+    .filter((k) => soc[k])
+    .map((k) => `<a href="${esc(soc[k])}" target="_blank" rel="noopener" aria-label="${names[k]}">${icons[k]}</a>`)
+    .join('');
 }
 
 /* ================= sign in / account ================= */

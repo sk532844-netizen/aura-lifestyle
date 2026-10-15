@@ -84,7 +84,7 @@
         <button class="btn" id="seedImportBtn">৫৫টি প্রোডাক্ট আপলোড করুন</button>
       </div>
       <div class="table-wrap"><table class="a-table" id="prodTable">
-        <thead><tr><th>ছবি</th><th>নাম / SKU</th><th>দাম</th><th>স্টক</th><th>দৃশ্যমান</th><th></th></tr></thead>
+        <thead><tr><th>ছবি</th><th>নাম / SKU</th><th>দাম</th><th>স্টক</th><th>দৃশ্যমান</th><th>⚡/★</th><th></th></tr></thead>
         <tbody></tbody>
       </table></div>
 
@@ -135,8 +135,9 @@
 
     <!-- CATEGORIES -->
     <section id="tab-categories" class="tab-page" hidden>
-      <p class="muted">কোন ক্যাটাগরি ওয়েবসাইটে দেখাবে, এখান থেকে চালু/বন্ধ করুন।</p>
+      <p class="muted">কোন ক্যাটাগরি ওয়েবসাইটে দেখাবে, এখান থেকে চালু/বন্ধ করুন। প্রতিটা ক্যাটাগরির ছবিও এখান থেকে বদলাতে পারবেন।</p>
       <div id="catList" class="cat-list"></div>
+      <input type="file" id="catImgFile" accept="image/*" hidden>
       <button class="btn" id="catSave">সেভ করুন</button>
     </section>
 
@@ -158,15 +159,29 @@
 
     <!-- REVIEWS -->
     <section id="tab-reviews" class="tab-page" hidden>
-      <p class="muted">স্প্যাম রিভিউ এখান থেকে ডিলিট করুন।</p>
+      <div class="card" style="margin-bottom:16px">
+        <h3>নতুন রিভিউ যোগ করুন</h3>
+        <div class="form-grid">
+          <label>নাম *<input id="rvName"></label>
+          <label>এলাকা<input id="rvLoc" placeholder="ঢাকা"></label>
+          <label>রেটিং<select id="rvRating"><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option></select></label>
+        </div>
+        <label style="display:block; margin-top:8px">রিভিউ *<textarea id="rvText" rows="2" style="width:100%"></textarea></label>
+        <label style="display:flex; align-items:center; gap:6px; margin-top:8px"><input type="checkbox" id="rvHome" checked style="width:18px; height:18px"> হোমপেজে দেখান</label>
+        <button class="btn btn-sm" id="rvAdd" style="margin-top:10px">রিভিউ যোগ করুন</button>
+      </div>
+      <p class="muted">কাস্টমারদের রিভিউ + আপনার যোগ করা রিভিউ — স্প্যাম এখান থেকে ডিলিট করুন।</p>
       <div id="reviewList" class="order-list"></div>
     </section>
 
     <!-- NEWSLETTER -->
     <section id="tab-newsletter" class="tab-page" hidden>
       <div class="row-between">
-        <h3>WhatsApp নম্বর (<span id="nlCount">0</span>)</h3>
-        <button class="btn btn-outline btn-sm" id="nlCopy">সব কপি করুন</button>
+        <h3>সাবস্ক্রাইবার (<span id="nlCount">0</span>)</h3>
+        <div style="display:flex; gap:8px">
+          <button class="btn btn-outline btn-sm" id="nlCopySel">সিলেক্টেড কপি</button>
+          <button class="btn btn-outline btn-sm" id="nlCopy">সব কপি করুন</button>
+        </div>
       </div>
       <div id="nlList" class="nl-list"></div>
     </section>
@@ -281,6 +296,12 @@
         <h3>ছবি আপলোড</h3>
         <div class="form-grid">
           <label>ImgBB API Key <span class="muted small">(imgbb.com → ফ্রি, গ্যালারি আপলোডের জন্য)</span><input id="sfImgbb" placeholder="API key পেস্ট করুন"></label>
+        </div>
+        <h3>হিরো ব্যানার <span class="muted small">(হোমপেজের বড় স্লাইডার — ছবি যোগ/বাদ দিন)</span></h3>
+        <div id="bannerList" style="display:flex; flex-direction:column; gap:10px; margin-bottom:10px"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+          <button type="button" class="btn btn-outline btn-sm" id="bannerAdd">+ ব্যানার যোগ করুন</button>
+          <input type="file" id="bannerFile" accept="image/*" hidden>
         </div>
         <div class="err" id="settingsErr"></div>
         <button class="btn" id="settingsSave">সেভ করুন</button>

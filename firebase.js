@@ -126,18 +126,26 @@ function friendlyAuthError(e) {
 
 /* ================= AUTH ================= */
 
-export async function signUp(email, password) {
+export async function signUp(email, password, name) {
   const f = await fb();
   if (!f) return { ok: false, demo: true };
   try {
     const cred = await f.aFns.createUserWithEmailAndPassword(f.auth, email.trim(), password);
+    /* display name */
+    if (name && f.aFns.updateProfile) {
+      try { await f.aFns.updateProfile(cred.user, { displayName: name.trim() }); } catch { /* best-effort */ }
+    }
     /* customer profile doc (for order history) */
     try {
       await f.fFns.setDoc(f.fFns.doc(f.db, C.users, cred.user.uid), {
-        email: email.trim().toLowerCase(), createdAt: f.fFns.serverTimestamp(),
+        name: (name || '').trim(), email: email.trim().toLowerCase(), createdAt: f.fFns.serverTimestamp(),
       });
     } catch { /* profile write is best-effort */ }
     return { ok: true, user: cred.user };
+  } catch (e) {
+    return { ok: false, error: friendlyAuthError(e) };
+  }
+}
   } catch (e) {
     return { ok: false, error: friendlyAuthError(e) };
   }
@@ -325,6 +333,31 @@ export async function updateOrderStatus(docId, stage) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+/* Admin: payment verified toggle */
+export async function setOrderPaid(docId, paid) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.updateDoc(f.fFns.doc(f.db, C.orders, docId), {
+      paid: !!paid, updatedAt: f.fFns.serverTimestamp(),
+    });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* Admin: paid toggle-এর সাথে public mirror-ও আপডেট */
+export async function setOrderPaidByOrderId(orderId, paid) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.setDoc(f.fFns.doc(f.db, C.orderStatus, String(orderId)), {
+      orderId: String(orderId), paid: !!paid,
+      updatedAt: f.fFns.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
 /* Admin: status বদলের সাথে public mirror-ও আপডেট (orderId জানা থাকলে) */
 export async function updateOrderStatusByOrderId(orderId, stage) {
   const f = await fb();
@@ -413,8 +446,7 @@ export async function submitReview(review) {
   } catch (e) { console.warn('[AURA] submitReview failed:', e); return false; }
 }
 
-/* Admin: সব রিভিউ (spam ডিলিটের জন্য) */
-export async function fetchAllReviews() {
+/* Admin: সব রিভিউ (spam ডিলিটের জন্য) */export async function fetchAllReviews() {
   const f = await fb();
   if (!f) return { ok: false, demo: true };
   try {
@@ -436,6 +468,23 @@ export async function deleteReview(id) {
     await f.fFns.deleteDoc(f.fFns.doc(f.db, C.reviews, id));
     return { ok: true };
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* Homepage "Customer Reviews" — admin থেকে homepage-ফ্ল্যাগ দেওয়া রিভিউ */
+export async function fetchHomepageReviews() {
+  const f = await fb();
+  if (!f) return [];
+  try {
+    const q = f.fFns.query(
+      f.fFns.collection(f.db, C.reviews),
+      f.fFns.where('homepage', '==', true),
+      f.fFns.orderBy('createdAt', 'desc'),
+    );
+    const snap = await f.fFns.getDocs(q);
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return list;
+  } catch (e) { console.warn('[AURA] fetchHomepageReviews failed:', e); return []; }
 }
 
 /* ================= STAFF ROLES ================= */

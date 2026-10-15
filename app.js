@@ -68,10 +68,10 @@ const I18N = {
   shopNow: { bn: 'এখনই শপ করুন', en: 'Shop Now' },
   freeShipSub: { bn: '৳২০০০+ অর্ডারে সারা বাংলাদেশে ফ্রি ডেলিভারি', en: 'Free delivery all over Bangladesh on orders above ৳2000' },
   nlT: { bn: 'নতুন অফার সবার আগে পান', en: 'Get new offers first' },
-  nlPh: { bn: 'আপনার ইমেইল', en: 'Your email' },
+  nlPh: { bn: 'ইমেইল অথবা মোবাইল নম্বর', en: 'Email or mobile number' },
   subscribe: { bn: 'সাবস্ক্রাইব', en: 'Subscribe' },
   nlOk: { bn: 'সাবস্ক্রাইব হয়েছে — ধন্যবাদ!', en: 'Subscribed — thank you!' },
-  nlBad: { bn: 'সঠিক ইমেইল দিন', en: 'Enter a valid email' },
+  nlBad: { bn: 'সঠিক ইমেইল বা মোবাইল নম্বর দিন', en: 'Enter a valid email or mobile number' },
   home: { bn: 'হোম', en: 'Home' },
   shop: { bn: 'সব প্রোডাক্ট', en: 'Shop All' },
   categories: { bn: 'টপ ক্যাটাগরি', en: 'Top Categories' },
@@ -215,6 +215,8 @@ const I18N = {
   trNotFound: { bn: 'অর্ডার পাওয়া যায়নি', en: 'Order not found' },
   trNotFoundP: { bn: 'অর্ডার আইডি ও মোবাইল নম্বর ঠিক আছে কিনা দেখুন।', en: 'Check that the order ID and mobile number are correct.' },
   trTotal: { bn: 'মোট:', en: 'Total:' },
+  payVerified: { bn: 'পেমেন্ট ভেরিফাইড ✓', en: 'Payment Verified ✓' },
+  payPending: { bn: 'পেমেন্ট পেন্ডিং', en: 'Payment Pending' },
   trCancelled: { bn: 'এই অর্ডারটি বাতিল করা হয়েছে।', en: 'This order has been cancelled.' },
   trReason: { bn: 'কারণ:', en: 'Reason:' },
   trDone: { bn: 'সম্পন্ন', en: 'Done' },
@@ -427,6 +429,18 @@ function onSearchInput(e) {
 
 /* ---------------- router ---------------- */
 let _lastPath = null;
+/* Homepage testimonials — admin থেকে homepage-ফ্ল্যাগ দেওয়া রিভিউ (fallback: seed) */
+async function loadHomeTestimonials() {
+  const box = $('#homeTesti');
+  if (!box || !isConfigured() || typeof fb.fetchHomepageReviews !== 'function') return;
+  try {
+    const list = await fb.fetchHomepageReviews();
+    if (list && list.length) {
+      box.innerHTML = list.slice(0, 6).map((x) => `<div class="testi"><div class="stars">${stars(x.rating || 5)}</div><p>"${esc(x.text || '')}"</p><b>${esc(x.name || '')}</b><span>${esc(x.loc || '')}</span></div>`).join('');
+    }
+  } catch { /* seed fallback থাকে */ }
+}
+
 function route() {
   const raw = location.hash.replace(/^#/, '') || 'home';
   const [path, qs] = raw.split('?');
@@ -455,6 +469,7 @@ function route() {
   bindDynamic();
   updateBadges();
   closeDrawer();
+  loadHomeTestimonials();
   if (pathChanged) window.scrollTo(0, 0);
   else if (path === 'shop') { const g = $('#shopGrid'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
@@ -504,21 +519,27 @@ function viewHome() {
   const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && !isOutOfStock(p) && p.visible !== false && catVisible(p)).slice(0, 4);
   const best = PRODUCTS.filter((p) => p.tag === 'best-seller' && p.visible !== false && catVisible(p)).slice(0, 4);
   const mains = visibleMains();
+  const banners = (SETTINGS.heroBanners || []).filter((b) => b && b.img);
+  const heroSlides = banners.length
+    ? banners.map((b) => `<div class="hc-slide"><img src="${esc(b.img)}" alt="${esc(b.title || 'AURA LIFESTYLE')}" loading="lazy"><div class="hero-cta">${b.title ? `<h2 class="hero-title">${esc(b.title)}</h2>` : ''}<a class="btn" href="${esc(b.link || '#shop')}">${t('shopNow')}</a></div></div>`).join('')
+    : `<div class="hc-slide"><img src="cover.jpg" alt="AURA LIFESTYLE"><div class="hero-cta"><a class="btn" href="#shop">${t('shopNow')}</a></div></div>
+      <div class="hc-slide hc-promo"><div class="hc-promo-txt"><h2>${t('flashPromoT')}</h2><p>${t('flashPromoS')}</p><a class="btn" href="#shop">${t('viewOffer')}</a></div></div>`;
+  const nSlides = banners.length || 2;
   return `
   <div class="hero-carousel" id="heroCarousel">
     <div class="hc-track" id="hcTrack">
-      <div class="hc-slide"><img src="cover.jpg" alt="AURA LIFESTYLE"><div class="hero-cta"><a class="btn" href="#shop">${t('shopNow')}</a></div></div>
-      <div class="hc-slide hc-promo"><div class="hc-promo-txt"><h2>${t('flashPromoT')}</h2><p>${t('flashPromoS')}</p><a class="btn" href="#shop">${t('viewOffer')}</a></div></div>
+      ${heroSlides}
     </div>
     <button class="hc-arrow hc-prev" id="hcPrev" aria-label="previous">‹</button>
     <button class="hc-arrow hc-next" id="hcNext" aria-label="next">›</button>
-    <div class="hc-dots" id="hcDots"><button class="on" data-i="0" aria-label="slide 1"></button><button data-i="1" aria-label="slide 2"></button></div>
+    <div class="hc-dots" id="hcDots">${Array.from({ length: nSlides }, (_, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}" aria-label="slide ${i + 1}"></button>`).join('')}</div>
   </div>
 
   <section class="section"><div class="section-head"><h2>${t('categories')}</h2><a href="#shop">${t('viewAll')} →</a></div>
   <div class="main-cat-grid">${mains.map((m) => {
     const subNames = m.subs.slice(0, 3).map((s) => LANG === 'bn' ? s.bn : s.en).join(' • ');
-    return `<a class="main-cat-card" href="#shop?main=${m.slug}"><img src="${esc(m.img)}" alt="${esc(LANG === 'bn' ? m.bn : m.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span class="mc-name">${esc(LANG === 'bn' ? m.bn : m.en)}</span><span class="mc-subs">${esc(subNames)}</span></a>`;
+    const cimg = ((SETTINGS.catImgs || {})[m.slug]) || m.img;
+    return `<a class="main-cat-card" href="#shop?main=${m.slug}"><img src="${esc(cimg)}" alt="${esc(LANG === 'bn' ? m.bn : m.en)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"><span class="mc-name">${esc(LANG === 'bn' ? m.bn : m.en)}</span><span class="mc-subs">${esc(subNames)}</span></a>`;
   }).join('')}</div></section>
 
   ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:14px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
@@ -535,10 +556,10 @@ function viewHome() {
   <div class="promo-strip"><div><b>${t('freeShip')}</b><span>${t('freeShipSub')}</span></div><a class="btn" href="#shop">${t('shopCta')}</a></div>
 
   <section class="section"><div class="section-head"><h2>${t('testi')}</h2></div>
-  <div class="testi-grid">${SEED_TESTIMONIALS.slice(0, 3).map((x) => `<div class="testi"><div class="stars">${stars(x.rating)}</div><p>"${esc(x.text)}"</p><b>${esc(x.name)}</b><span>${esc(x.loc)}</span></div>`).join('')}</div></section>
+  <div class="testi-grid" id="homeTesti">${SEED_TESTIMONIALS.slice(0, 3).map((x) => `<div class="testi"><div class="stars">${stars(x.rating)}</div><p>"${esc(x.text)}"</p><b>${esc(x.name)}</b><span>${esc(x.loc)}</span></div>`).join('')}</div></section>
 
   <section class="section"><div class="newsletter"><h2>${t('nlT')}</h2>
-  <form id="nlForm"><input type="email" id="nlEmail" placeholder="${t('nlPh')}" required><button class="btn" type="submit">${t('subscribe')}</button></form></div></section>`;
+  <form id="nlForm"><input id="nlEmail" placeholder="${t('nlPh')}" required><button class="btn" type="submit">${t('subscribe')}</button></form></div></section>`;
 }
 
 /* ---------------- SHOP ---------------- */
@@ -744,24 +765,33 @@ function viewCheckout() {
       <div class="field"><label>${t('fNote')}</label><textarea id="coNote" rows="2" placeholder="${t('fNotePh')}"></textarea></div>
     </div>
     <div class="card" style="margin-top:16px"><h3>${t('payMethod')}</h3>
-      <label class="pay-opt sel"><input type="radio" name="pay" value="cod" checked class="pay-radio">
-        <b>${t('payCodT')}</b>
-        <span>${t('payCodD')}</span>
+      <div class="pay-grid">
+      <label class="pay-card sel"><input type="radio" name="pay" value="cod" checked class="pay-radio">
+        <span class="pay-ic">💵</span>
+        <span class="pay-tx"><b>${t('payCodT')}</b><small>${t('payCodD')}</small></span>
+        <span class="pay-tick">✓</span>
       </label>
-      <label class="pay-opt"><input type="radio" name="pay" value="bkash" class="pay-radio">
-        <b>bKash</b>
-        <span>${t('payBkashD')}</span>
-        <div class="pay-num">${payNumLabel(t('mBkash'), SETTINGS.bkashLabel)} <b>${esc(SETTINGS.bkash)}</b></div>
-        <input class="trx-input" id="trxBkash" placeholder="${t('trxPh', { m: mBk })}" style="display:none">
-        <input class="trx-input" id="senderBkash" placeholder="${t('senderNum', { m: mBk })}" inputmode="numeric" style="display:none">
+      <label class="pay-card"><input type="radio" name="pay" value="bkash" class="pay-radio">
+        <span class="pay-ic pay-bk">b</span>
+        <span class="pay-tx"><b>bKash</b><small>${t('payBkashD')}</small></span>
+        <span class="pay-tick">✓</span>
+        <span class="pay-extra">
+          <span class="pay-pill">${payNumLabel(t('mBkash'), SETTINGS.bkashLabel)} <b>${esc(SETTINGS.bkash)}</b><button type="button" class="copy-btn" data-copy="${esc(SETTINGS.bkash)}" aria-label="copy">⧉</button></span>
+          <input class="trx-input" id="trxBkash" placeholder="${t('trxPh', { m: mBk })}" style="display:none">
+          <input class="trx-input" id="senderBkash" placeholder="${t('senderNum', { m: mBk })}" inputmode="numeric" style="display:none">
+        </span>
       </label>
-      <label class="pay-opt"><input type="radio" name="pay" value="nagad" class="pay-radio">
-        <b>Nagad</b>
-        <span>${t('payNagadD')}</span>
-        <div class="pay-num">${payNumLabel(t('mNagad'), SETTINGS.nagadLabel)} <b>${esc(SETTINGS.nagad)}</b></div>
-        <input class="trx-input" id="trxNagad" placeholder="${t('trxPh', { m: mNg })}" style="display:none">
-        <input class="trx-input" id="senderNagad" placeholder="${t('senderNum', { m: mNg })}" inputmode="numeric" style="display:none">
+      <label class="pay-card"><input type="radio" name="pay" value="nagad" class="pay-radio">
+        <span class="pay-ic pay-ng">n</span>
+        <span class="pay-tx"><b>Nagad</b><small>${t('payNagadD')}</small></span>
+        <span class="pay-tick">✓</span>
+        <span class="pay-extra">
+          <span class="pay-pill">${payNumLabel(t('mNagad'), SETTINGS.nagadLabel)} <b>${esc(SETTINGS.nagad)}</b><button type="button" class="copy-btn" data-copy="${esc(SETTINGS.nagad)}" aria-label="copy">⧉</button></span>
+          <input class="trx-input" id="trxNagad" placeholder="${t('trxPh', { m: mNg })}" style="display:none">
+          <input class="trx-input" id="senderNagad" placeholder="${t('senderNum', { m: mNg })}" inputmode="numeric" style="display:none">
+        </span>
       </label>
+      </div>
       <label class="check-row"><input type="checkbox" id="coTerms" required> <span>${t('termsAgree')}</span></label>
       <div class="err" id="coErr"></div>
     </div>
@@ -810,11 +840,14 @@ async function placeOrder(e) {
     const del = deliveryCharge(district, sub);
     const total = sub + del;
     const orderId = 'AL-' + Math.floor(100000 + Math.random() * 900000);
+    const sessUser = loadLS('aura_user', null);
     const order = {
       orderId, name, phone, district, address, email, whats, note, pay,
       trxId, senderNumber,
+      uid: (sessUser && (sessUser.uid || sessUser.email)) || '',
+      userEmail: (sessUser && sessUser.email) || email || '',
       items: cart.map((i) => ({ id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id })),
-      subtotal: sub, delivery: del, total, stage: 'pending', courier: '', trackingNumber: '', dispatchDate: '',
+      subtotal: sub, delivery: del, total, stage: 'pending', paid: false, courier: '', trackingNumber: '', dispatchDate: '',
       createdAt: new Date().toISOString(),
     };
     const remoteId = await saveOrder(order);
@@ -882,6 +915,7 @@ function renderTrackResult(o) {
   el.innerHTML = `<div style="margin-top:18px">
     <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px"><b>${t('osIdLbl')} ${esc(o.orderId)}</b><span class="status-pill ${cancelled ? 'cancelled' : (stage === 'delivered' ? 'delivered' : '')}">${stageLabel(stage)}</span></div>
     <p style="font-size:14px; color:var(--muted); margin-top:6px">${t('trTotal')} ${fmt(o.total)} • ${t('osPay')} ${esc((o.pay || '').toUpperCase())} • ${esc(o.district || '')}</p>
+    <p style="margin-top:6px"><span class="status-pill ${o.paid ? 'delivered' : ''}">${o.paid ? t('payVerified') : t('payPending')}</span>${o.trxId ? ` <span style="font-size:13px; color:var(--muted)">TrxID: <b>${esc(o.trxId)}</b></span>` : ''}</p>
     ${cancelled ? `<p style="color:var(--red); font-weight:700; margin-top:10px">${t('trCancelled')}${o.cancelReason ? ' ' + t('trReason') + ' ' + esc(o.cancelReason) : ''}</p>` :
     `<div class="timeline">${visible.map((s) => { const si = STAGES.findIndex((x) => x.key === s.key); const cls = si < idx ? 'done' : (si === idx ? 'current' : ''); return `<div class="tl-step ${cls}"><b>${stageLabel(s.key)}</b><span>${si <= idx ? t('trDone') : t('trPending')}</span></div>`; }).join('')}</div>`}
     ${o.courier ? `<div class="courier-box"><b>${t('trCourier')} ${esc(o.courier)}</b><br>${t('trTracking')} <b>${esc(o.trackingNumber || '-')}</b>${o.dispatchDate ? `<br>${t('trDispatch')} ${esc(o.dispatchDate)}` : ''}<br><span style="font-size:13px">${t('trCourierHint')}</span></div>` : ''}
@@ -915,6 +949,7 @@ function renderTrackStatusOnly(s) {
   const cancelled = stage === 'cancelled';
   el.innerHTML = `<div style="margin-top:18px">
     <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px"><b>${t('osIdLbl')} ${esc(s.orderId)}</b><span class="status-pill ${cancelled ? 'cancelled' : (stage === 'delivered' ? 'delivered' : '')}">${stageLabel(stage)}</span></div>
+    <p style="margin-top:6px"><span class="status-pill ${s.paid ? 'delivered' : ''}">${s.paid ? t('payVerified') : t('payPending')}</span></p>
     ${cancelled ? '' : `<div class="timeline">${visible.map((x) => { const si = STAGES.findIndex((y) => y.key === x.key); const cls = si < idx ? 'done' : (si === idx ? 'current' : ''); return `<div class="tl-step ${cls}"><b>${stageLabel(x.key)}</b><span>${si <= idx ? t('trDone') : t('trPending')}</span></div>`; }).join('')}</div>`}
   </div>`;
 }
@@ -1036,7 +1071,18 @@ bindDynamic = function () {
   _origBind();
   /* newsletter */
   const nl = $('#nlForm');
-  if (nl) nl.addEventListener('submit', (e) => { e.preventDefault(); const em = $('#nlEmail').value.trim(); if (!/^\S+@\S+\.\S+$/.test(em)) { toast(t('nlBad')); return; } toast(t('nlOk')); nl.reset(); });
+  if (nl) nl.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const val = $('#nlEmail').value.trim();
+    const isEmail = /^\S+@\S+\.\S+$/.test(val);
+    const isPhone = /^01[3-9]\d{8}$/.test(val.replace(/[\s-]/g, ''));
+    if (!isEmail && !isPhone) { toast(t('nlBad')); return; }
+    let ok = false;
+    if (isConfigured() && typeof fb.saveNewsletterNumber === 'function') {
+      try { ok = await fb.saveNewsletterNumber(val); } catch { ok = false; }
+    }
+    toast(t('nlOk')); nl.reset();
+  });
   /* contact form */
   const cf = $('#contactForm');
   if (cf) cf.addEventListener('submit', (e) => { e.preventDefault(); toast(t('ctOk')); cf.reset(); });
@@ -1045,9 +1091,10 @@ bindDynamic = function () {
   if (hc) {
     const track = $('#hcTrack');
     const dots = $$('#hcDots button');
+    const n = dots.length || 2;
     let cur = 0, timer = null;
     const go = (i) => {
-      cur = (i + 2) % 2;
+      cur = ((i % n) + n) % n;
       track.style.transform = `translateX(-${cur * 100}%)`;
       dots.forEach((d, di) => d.classList.toggle('on', di === cur));
     };
@@ -1103,14 +1150,21 @@ bindDynamic = function () {
   if (co) {
     co.addEventListener('submit', placeOrder);
     $$('input[name="pay"]').forEach((r) => r.addEventListener('change', () => {
-      $$('.pay-opt').forEach((o) => {
+      $$('.pay-card').forEach((o) => {
         const checked = o.querySelector('input').checked;
         o.classList.toggle('sel', checked);
         o.querySelectorAll('.trx-input').forEach((ti) => { ti.style.display = checked ? 'block' : 'none'; });
       });
     }));
-    $('#coDistrict').addEventListener('change', () => {
-      const dv = $('#coDistrict').value;
+    /* copy payment number */
+    $$('.copy-btn').forEach((b) => b.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const txt = b.dataset.copy || '';
+      const done = () => { b.textContent = '✓'; setTimeout(() => { b.textContent = '⧉'; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
+      else done();
+    }));
+    $('#coDistrict').addEventListener('change', () => {      const dv = $('#coDistrict').value;
       const sub = cartTotal();
       const dt = $('#coDelTime');
       if (dt) dt.textContent = !dv ? '' : (dv.startsWith('ঢাকা (সিটি)') ? t('delTimeIn') : t('delTimeOut'));
@@ -1334,24 +1388,24 @@ async function doLogin(email, pw) {
   if (!isConfigured() || typeof fb.signIn !== 'function') { toast(t('siDemo')); return; }
   try {
     const r = await fb.signIn(email, pw);
-    const user = (r && r.user) || r;
-    if (user && (user.email || user.uid)) {
-      const u = saveSessionUser(user);
+    if (r && r.ok && r.user) {
+      const user = r.user;
+      const u = saveSessionUser({ uid: user.uid, email: user.email || email, name: user.displayName || '' });
       toast(t('siWelcome', { n: u.name || u.email }));
       route();
-    } else { $('#siErr').textContent = t('siLoginFail'); }
+    } else { const e = $('#siErr'); if (e) e.textContent = (r && r.error) || t('siLoginFail'); }
   } catch { const e = $('#siErr'); if (e) e.textContent = t('siLoginFail'); }
 }
 async function doSignup(name, email, pw) {
   if (!isConfigured() || typeof fb.signUp !== 'function') { toast(t('siDemo')); return; }
   try {
-    const r = await fb.signUp(name, email, pw);
-    const user = (r && r.user) || r;
-    if (user && (user.email || user.uid)) {
-      const u = saveSessionUser({ ...user, name: user.displayName || user.name || name, email: user.email || email });
+    const r = await fb.signUp(email, pw, name);
+    if (r && r.ok && r.user) {
+      const user = r.user;
+      const u = saveSessionUser({ uid: user.uid, email: user.email || email, name: user.displayName || name });
       toast(t('siWelcome', { n: u.name || u.email }));
       route();
-    } else { $('#suErr').textContent = t('siSignupFail'); }
+    } else { const e = $('#suErr'); if (e) e.textContent = (r && r.error) || t('siSignupFail'); }
   } catch { const e = $('#suErr'); if (e) e.textContent = t('siSignupFail'); }
 }
 async function loadAccountOrders() {

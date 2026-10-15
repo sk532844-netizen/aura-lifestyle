@@ -102,7 +102,8 @@ img { max-width: 100%; display: block; }
 .hc-dots { position: absolute; bottom: 16px; right: 16px; display: flex; gap: 8px; z-index: 2; }
 .hc-dots button { width: 10px; height: 10px; border-radius: 50%; border: none; background: rgba(255,255,255,.55); padding: 0; }
 .hc-dots button.on { background: var(--gold); width: 26px; border-radius: 999px; }
-.hero-cta { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 2; }
+.hero-cta { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 2; text-align: center; }
+.hero-title { color: #fff; font-size: 26px; margin: 0 0 10px; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
 .hero-cta .btn { box-shadow: 0 6px 22px rgba(0,0,0,.35); }
 
 /* ---------- floating cart bubble ---------- */
@@ -238,6 +239,25 @@ img { max-width: 100%; display: block; }
 .field input, .field select, .field textarea { width: 100%; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; font-family: inherit; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold); outline: none; }
 .field .hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.pay-grid { display: flex; flex-direction: column; gap: 10px; }
+.pay-card { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: 14px; padding: 13px 14px; cursor: pointer; position: relative; transition: border-color .15s, box-shadow .15s, background .15s; background: #fff; }
+.pay-card .pay-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pay-card.sel { border-color: var(--gold); background: #fffdf4; box-shadow: 0 2px 10px rgba(201,162,39,.14); }
+.pay-ic { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #f1f5f9; }
+.pay-bk { background: #e2136e; color: #fff; font-weight: 800; font-size: 22px; font-style: italic; }
+.pay-ng { background: #f6921e; color: #fff; font-weight: 800; font-size: 22px; font-style: italic; }
+.pay-tx { flex: 1; min-width: 0; }
+.pay-tx b { display: block; font-size: 15px; color: var(--navy); }
+.pay-tx small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.pay-tick { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: #fff; font-weight: 800; font-size: 13px; display: none; align-items: center; justify-content: center; }
+.pay-card.sel .pay-tick { display: flex; }
+.pay-extra { display: none; flex-basis: 100%; margin-top: 4px; }
+.pay-card.sel .pay-extra { display: block; }
+.pay-pill { display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; color: var(--ink); margin: 8px 0; }
+.pay-pill b { color: var(--gold); letter-spacing: .5px; font-size: 15px; }
+.copy-btn { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 9px; cursor: pointer; font-size: 14px; color: var(--navy); }
+.copy-btn:active { transform: scale(.94); }
+.pay-card .trx-input { margin-top: 8px; }
 .pay-opt { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; cursor: pointer; position: relative; }
 .pay-opt .pay-radio { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .pay-opt:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }

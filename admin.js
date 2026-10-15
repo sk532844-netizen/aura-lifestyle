@@ -6,8 +6,8 @@ import {
   isConfigured, onAuthState, signIn, signOut, resetPassword,
   fetchProducts, saveProduct, deleteProduct,
   fetchSettings, saveSettings,
-  fetchOrders, updateOrderStatus, updateOrderStatusByOrderId,
-  fetchAllReviews, deleteReview,
+  fetchOrders, updateOrderStatus, updateOrderStatusByOrderId, setOrderPaid, setOrderPaidByOrderId,
+  fetchAllReviews, deleteReview, submitReview, fetchHomepageReviews,
   fetchNewsletterNumbers,
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
   createStaffAccount, uploadProductImage, deleteProductImage,
@@ -226,15 +226,30 @@ function renderProducts() {
       <td>${fmt(p.price)}${p.oldPrice > p.price ? `<br><small class="muted"><s>${fmt(p.oldPrice)}</s></small>` : ''}</td>
       <td><small>${stockTxt}</small></td>
       <td><button class="pill ${vis ? 'ok' : 'no'} vis-toggle" data-vis="${esc(p.id)}" title="চালু/বন্ধ করুন">${vis ? 'চালু' : 'বন্ধ'}</button></td>
+      <td><div style="display:flex; gap:4px">
+        <button class="pill ${p.tag === 'flash-sale' ? 'ok' : ''}" data-tag="flash-sale:${esc(p.id)}" title="Flash Sale-তে রাখুন/সরান">⚡</button>
+        <button class="pill ${p.tag === 'best-seller' ? 'ok' : ''}" data-tag="best-seller:${esc(p.id)}" title="Best Sellers-এ রাখুন/সরান">★</button>
+      </div></td>
       <td><div class="row-actions">
         <button class="btn btn-outline btn-sm" data-edit="${esc(p.id)}">এডিট</button>
         <button class="btn btn-outline btn-sm" data-del="${esc(p.id)}">ডিলিট</button>
       </div></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" style="text-align:center; color:var(--muted)">কোনো প্রোডাক্ট নেই।</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="text-align:center; color:var(--muted)">কোনো প্রোডাক্ট নেই।</td></tr>';
   $$('#prodTable [data-edit]').forEach((b) => b.addEventListener('click', () => openProdForm(b.dataset.edit)));
   $$('#prodTable [data-del]').forEach((b) => b.addEventListener('click', () => delProduct(b.dataset.del)));
   $$('#prodTable [data-vis]').forEach((b) => b.addEventListener('click', () => toggleVisible(b.dataset.vis)));
+  $$('#prodTable [data-tag]').forEach((b) => b.addEventListener('click', () => toggleTag(b.dataset.tag)));
+}
+
+async function toggleTag(spec) {
+  const [tag, id] = spec.split(':');
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+  const nv = p.tag === tag ? '' : tag;
+  const r = await saveProduct({ ...p, tag: nv });
+  if (r.ok) { p.tag = nv; renderProducts(); toast(nv === 'flash-sale' ? '⚡ Flash Sale-এ যোগ হয়েছে।' : nv === 'best-seller' ? '★ Best Sellers-এ যোগ হয়েছে।' : 'ট্যাগ সরানো হয়েছে।'); }
+  else toast('ব্যর্থ: ' + (r.error || ''));
 }
 
 async function toggleVisible(id) {
@@ -489,16 +504,47 @@ function initProducts() {
 /* ================= CATEGORIES ================= */
 function renderCategories() {
   const hidden = (settings && settings.hiddenCategories) || [];
+  const catImgs = (settings && settings.catImgs) || {};
   $('#catList').innerHTML = (typeof MAIN_CATEGORIES !== 'undefined' ? MAIN_CATEGORIES : []).map((m) => {
     const on = !hidden.includes(m.slug);
-    return `<div class="cat-row"><div><b>${esc(m.bn)}</b><small>${m.subs.length}টি সাব-ক্যাটাগরি</small></div>
+    const img = catImgs[m.slug] || m.img || '';
+    return `<div class="cat-row">
+      <img src="${esc(img)}" style="width:56px; height:40px; object-fit:cover; border-radius:6px" onerror="this.style.visibility='hidden'">
+      <div style="flex:1"><b>${esc(m.bn)}</b><small>${m.subs.length}টি সাব-ক্যাটাগরি</small></div>
+      <button type="button" class="btn btn-outline btn-sm" data-catimg="${m.slug}">ছবি বদলান</button>
       <label class="switch"><input type="checkbox" data-cat="${m.slug}" ${on ? 'checked' : ''}><span class="slider"></span></label></div>`;
   }).join('');
+  $$('#catList [data-catimg]').forEach((b) => b.onclick = () => {
+    $('#catImgFile').dataset.slug = b.dataset.catimg;
+    $('#catImgFile').click();
+  });
+}
+let catImgUploading = false;
+async function bindCatImgUpload() {
+  $('#catImgFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    const slug = e.target.dataset.slug;
+    e.target.value = '';
+    if (!f || !slug || catImgUploading) return;
+    const key = (settings && settings.imgbbKey) || '';
+    if (!key) { toast('আগে Settings থেকে ImgBB API Key সেভ করুন।'); return; }
+    catImgUploading = true;
+    toast('আপলোড হচ্ছে...');
+    try {
+      const url = await uploadBannerImage(f, key);
+      if (url) {
+        settings = { ...settings, catImgs: { ...((settings && settings.catImgs) || {}), [slug]: url } };
+        renderCategories();
+        toast('ছবি বদলেছে — নিচের "সেভ করুন" চাপুন।');
+      } else toast('আপলোড ব্যর্থ।');
+    } catch { toast('আপলোড ব্যর্থ।'); }
+    catImgUploading = false;
+  };
 }
 async function saveCategories() {
   const hidden = $$('#catList input[data-cat]').filter((i) => !i.checked).map((i) => i.dataset.cat);
-  const r = await saveSettings({ ...(settings || {}), hiddenCategories: hidden });
-  if (r.ok) { settings = { ...(settings || {}), hiddenCategories: hidden }; toast('সেভ হয়েছে।'); }
+  const r = await saveSettings({ ...(settings || {}), hiddenCategories: hidden, catImgs: (settings && settings.catImgs) || {} });
+  if (r.ok) { settings = { ...(settings || {}), hiddenCategories: hidden, catImgs: (settings && settings.catImgs) || {} }; toast('সেভ হয়েছে।'); }
   else toast('সেভ ব্যর্থ: ' + (r.error || ''));
 }
 
@@ -521,6 +567,7 @@ function orderCard(o) {
         <span>📞 ${esc(o.phone || '')}</span>
         <span>${esc(o.district || '')} — ${esc(o.address || '')}</span>
         <span>পেমেন্ট: ${pay}${o.trxId ? ' · TrxID: <b>' + esc(o.trxId) + '</b>' : ''}${o.senderNumber ? ' · নম্বর: <b>' + esc(o.senderNumber) + '</b>' : ''}</span>
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600"><input type="checkbox" data-paid="${esc(o.id)}" data-orderid="${esc(o.orderId || '')}" ${o.paid ? 'checked' : ''} style="width:18px; height:18px; accent-color:#16a34a"> পেমেন্ট ভেরিফাইড</label>
         <span>${fmtDate(o.createdAt)}</span>
       </div>
       <div class="order-items">${items}</div>
@@ -552,6 +599,18 @@ function bindOrderCards(root) {
       renderDashboard();
     } else toast('আপডেট ব্যর্থ: ' + (r.error || ''));
   }));
+  $$('[data-paid]', root).forEach((cb) => cb.addEventListener('change', async () => {
+    const r = await setOrderPaid(cb.dataset.paid, cb.checked);
+    if (r.ok) {
+      const o = orders.find((x) => x.id === cb.dataset.paid);
+      if (o) {
+        o.paid = cb.checked;
+        /* public mirror আপডেট — tracking-এ payment status দেখাবে */
+        if (o.orderId || cb.dataset.orderid) setOrderPaidByOrderId(o.orderId || cb.dataset.orderid, cb.checked);
+      }
+      toast(cb.checked ? 'পেমেন্ট ভেরিফাইড ✓' : 'পেমেন্ট পেন্ডিং করা হয়েছে।');
+    } else { cb.checked = !cb.checked; toast('আপডেট ব্যর্থ: ' + (r.error || '')); }
+  }));
 }
 async function loadOrders() {
   const r = await fetchOrders();
@@ -581,9 +640,9 @@ async function loadReviews() {
   $('#reviewList').innerHTML = r.reviews.map((v) => {
     const p = products.find((x) => x.id === v.productId);
     return `<div class="order-card">
-      <div class="order-head"><b>${esc(p ? (p.nameBn || p.nameEn) : v.productId)}</b>
+      <div class="order-head"><b>${esc(v.homepage ? '🏠 ' : '')}${esc(p ? (p.nameBn || p.nameEn) : (v.name || 'জেনারেল'))}</b>
         <button class="btn btn-outline btn-sm" data-rdel="${esc(v.id)}">ডিলিট</button></div>
-      <div class="order-meta"><span>${'★'.repeat(Math.round(v.rating || 5))} · <b>${esc(v.name || '')}</b> · ${fmtDate(v.createdAt)}</span></div>
+      <div class="order-meta"><span>${'★'.repeat(Math.round(v.rating || 5))} · <b>${esc(v.name || '')}</b>${v.loc ? ' · ' + esc(v.loc) : ''} · ${fmtDate(v.createdAt)}</span></div>
       <p>${esc(v.text || '')}</p>
     </div>`;
   }).join('') || '<p class="muted">কোনো রিভিউ নেই।</p>';
@@ -592,6 +651,15 @@ async function loadReviews() {
     const d = await deleteReview(b.dataset.rdel);
     if (d.ok) { toast('ডিলিট হয়েছে।'); loadReviews(); } else toast('ব্যর্থ।');
   }));
+  $('#rvAdd').onclick = async () => {
+    const name = $('#rvName').value.trim(), text = $('#rvText').value.trim();
+    const loc = $('#rvLoc').value.trim(), rating = +$('#rvRating').value || 5;
+    const homepage = $('#rvHome').checked;
+    if (!name || !text) { toast('নাম ও রিভিউ লিখুন।'); return; }
+    const ok = await submitReview({ name, text, loc, rating, homepage, verified: true });
+    if (ok) { toast('রিভিউ যোগ হয়েছে।'); $('#rvName').value = ''; $('#rvText').value = ''; $('#rvLoc').value = ''; loadReviews(); }
+    else toast('ব্যর্থ।');
+  };
 }
 
 /* ================= NEWSLETTER ================= */
@@ -599,14 +667,20 @@ async function loadNewsletter() {
   const r = await fetchNewsletterNumbers();
   if (!r.ok) { $('#nlList').innerHTML = '<p class="muted">লোড ব্যর্থ।</p>'; return; }
   $('#nlCount').textContent = r.numbers.length;
-  $('#nlList').innerHTML = r.numbers.map((n) =>
-    `<div class="nl-row"><b>${esc(n.number)}</b><small>${fmtDate(n.createdAt)}</small></div>`,
-  ).join('') || '<p class="muted">এখনো কোনো নম্বর নেই।</p>';
-  $('#nlCopy').onclick = async () => {
-    const txt = r.numbers.map((n) => n.number).join('\n');
+  $('#nlList').innerHTML = r.numbers.map((n, i) =>
+    `<div class="nl-row"><input type="checkbox" data-nl="${i}" style="width:18px; height:18px; accent-color:#c9a227"><b>${esc(n.number)}</b><small>${fmtDate(n.createdAt)}</small><button class="btn btn-outline btn-sm" data-nlcopy="${i}">কপি</button></div>`,
+  ).join('') || '<p class="muted">এখনো কেউ সাবস্ক্রাইব করেনি।</p>';
+  const copyTxt = async (txt) => {
     try { await navigator.clipboard.writeText(txt); toast('কপি হয়েছে।'); }
     catch { toast('কপি করা যায়নি।'); }
   };
+  $('#nlCopy').onclick = () => copyTxt(r.numbers.map((n) => n.number).join('\n'));
+  $('#nlCopySel').onclick = () => {
+    const sel = [...document.querySelectorAll('#nlList [data-nl]:checked')].map((c) => r.numbers[+c.dataset.nl].number);
+    if (!sel.length) { toast('কিছু সিলেক্ট করুন।'); return; }
+    copyTxt(sel.join('\n'));
+  };
+  $$('#nlList [data-nlcopy]').forEach((b) => b.onclick = () => copyTxt(r.numbers[+b.dataset.nlcopy].number));
 }
 
 /* ================= SETTINGS ================= */
@@ -631,6 +705,77 @@ function renderSettings() {
   const soc = settings.social || {};
   v('#sfFb', soc.facebook); v('#sfIg', soc.instagram); v('#sfYt', soc.youtube);
   v('#sfImgbb', settings.imgbbKey);
+  renderBanners();
+}
+
+/* ---------- hero banner manager ---------- */
+function renderBanners() {
+  const list = (settings && settings.heroBanners) || [];
+  $('#bannerList').innerHTML = list.map((b, i) => `
+    <div class="banner-row" style="display:flex; gap:10px; align-items:center; border:1px solid var(--line); border-radius:10px; padding:8px">
+      <img src="${esc(b.img)}" style="width:90px; height:52px; object-fit:cover; border-radius:6px" onerror="this.style.visibility='hidden'">
+      <div style="flex:1; display:flex; flex-direction:column; gap:6px">
+        <input data-bi="${i}" data-bf="title" placeholder="টাইটেল (ঐচ্ছিক)" value="${esc(b.title || '')}" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px">
+        <input data-bi="${i}" data-bf="link" placeholder="লিংক (যেমন #shop)" value="${esc(b.link || '#shop')}" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px">
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <button type="button" class="btn btn-outline btn-sm" data-bup="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn btn-outline btn-sm" data-bdn="${i}" ${i === list.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn btn-outline btn-sm" data-bdel="${i}">✕</button>
+      </div>
+    </div>`).join('') || '<p class="muted">কোনো ব্যানার নেই — ডিফল্ট ব্যানার দেখাবে।</p>';
+  $$('#bannerList [data-bup]').forEach((b) => b.onclick = () => moveBanner(+b.dataset.bup, -1));
+  $$('#bannerList [data-bdn]').forEach((b) => b.onclick = () => moveBanner(+b.dataset.bdn, 1));
+  $$('#bannerList [data-bdel]').forEach((b) => b.onclick = () => {
+    const l = [...(settings.heroBanners || [])]; l.splice(+b.dataset.bdel, 1);
+    settings = { ...settings, heroBanners: l }; renderBanners();
+  });
+  $$('#bannerList [data-bi]').forEach((inp) => inp.onchange = () => {
+    const l = [...(settings.heroBanners || [])];
+    l[+inp.dataset.bi] = { ...l[+inp.dataset.bi], [inp.dataset.bf]: inp.value.trim() };
+    settings = { ...settings, heroBanners: l };
+  });
+}
+function moveBanner(i, d) {
+  const l = [...(settings.heroBanners || [])];
+  const j = i + d;
+  if (j < 0 || j >= l.length) return;
+  [l[i], l[j]] = [l[j], l[i]];
+  settings = { ...settings, heroBanners: l }; renderBanners();
+}
+function bindBannerAdd() {
+  $('#bannerAdd').onclick = () => $('#bannerFile').click();
+  $('#bannerFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const key = (settings && settings.imgbbKey) || '';
+    if (!key) { toast('আগে ImgBB API Key সেভ করুন।'); e.target.value = ''; return; }
+    toast('আপলোড হচ্ছে...');
+    try {
+      const url = await uploadBannerImage(f, key);
+      if (url) {
+        settings = { ...settings, heroBanners: [...(settings.heroBanners || []), { img: url, title: '', link: '#shop' }] };
+        renderBanners(); toast('ব্যানার যোগ হয়েছে — সেভ করুন।');
+      } else toast('আপলোড ব্যর্থ।');
+    } catch { toast('আপলোড ব্যর্থ।'); }
+    e.target.value = '';
+  };
+}
+async function uploadBannerImage(file, key) {
+  /* client-side compress */
+  const bmp = await createImageBitmap(file);
+  const maxW = 1200;
+  const sc = Math.min(1, maxW / bmp.width);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', 0.82));
+  const fd = new FormData();
+  fd.append('key', key);
+  fd.append('image', blob, 'banner.jpg');
+  const r = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: fd });
+  const d = await r.json();
+  return d && d.success && d.data ? d.data.url : null;
 }
 async function saveSettingsForm() {
   const err = $('#settingsErr');
@@ -648,6 +793,7 @@ async function saveSettingsForm() {
       youtube: $('#sfYt').value.trim(),
     },
     imgbbKey: $('#sfImgbb').value.trim(),
+    heroBanners: (settings && settings.heroBanners) || [],
   };
   err.textContent = '';
   $('#settingsSave').disabled = true;
@@ -899,9 +1045,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initStaff();
   initImport();
   $('#catSave').addEventListener('click', saveCategories);
+  bindCatImgUpload();
   $('#orderSearch').addEventListener('input', renderOrders);
   $('#orderFilter').addEventListener('change', renderOrders);
   $('#settingsSave').addEventListener('click', saveSettingsForm);
+  bindBannerAdd();
   $('#settingsInitBtn').addEventListener('click', async () => {
     const base = typeof DEFAULT_SETTINGS !== 'undefined' ? { ...DEFAULT_SETTINGS } : {};
     const r = await saveSettings({ ...base, bkashLabel: 'personal', nagadLabel: 'personal' });

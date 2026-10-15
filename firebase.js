@@ -89,21 +89,18 @@ async function fb() {
   if (!isConfigured()) return null;
   _fbPromise = (async () => {
     try {
-      const [appMod, authMod, fsMod, stMod] = await Promise.all([
+      const [appMod, authMod, fsMod] = await Promise.all([
         import(`${SDK}/firebase-app.js`),
         import(`${SDK}/firebase-auth.js`),
         import(`${SDK}/firebase-firestore.js`),
-        import(`${SDK}/firebase-storage.js`),
       ]);
       const app = appMod.initializeApp(FIREBASE_CONFIG);
       _fb = {
         app,
         auth: authMod.getAuth(app),
         db: fsMod.getFirestore(app),
-        storage: stMod.getStorage(app),
         aFns: authMod,
         fFns: fsMod,
-        sFns: stMod,
         appMod,
       };
       return _fb;
@@ -486,49 +483,38 @@ export async function createStaffAccount(email, password) {
   }
 }
 
-/* ================= STORAGE (product image direct upload) ================= */
+/* ================= IMGBB (free image upload — no billing needed) ================= */
 
-function friendlyStorageError(e) {
-  const code = (e && e.code) || '';
-  if (code === 'storage/unauthorized') return 'আপলোডের অনুমতি নেই।';
-  if (code === 'storage/canceled') return 'আপলোড বাতিল হয়েছে।';
-  if (code === 'storage/unknown' || code === 'storage/bucket-not-found')
-    return 'Storage চালু নেই — Firebase Console → Build → Storage → Get started চাপুন।';
-  return 'আপলোড ব্যর্থ হয়েছে। আবার চেষ্টা করুন।';
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
 }
 
-/* file → Storage products/{productId}/… → download URL */
-export async function uploadProductImage(file, productId) {
-  const f = await fb();
-  if (!f) return { ok: false, demo: true };
+/* file → ImgBB → public URL. apiKey: Settings → ImgBB API Key (imgbb.com, free) */
+export async function uploadProductImage(file, productId, apiKey) {
+  if (!apiKey) return { ok: false, error: 'ImgBB API Key নেই — Admin → Settings → ImgBB API Key দিন (imgbb.com থেকে ফ্রি)।' };
   try {
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const path = `products/${productId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const ref = f.sFns.ref(f.storage, path);
-    await f.sFns.uploadBytes(ref, file, { contentType: file.type || 'image/jpeg' });
-    const url = await f.sFns.getDownloadURL(ref);
-    return { ok: true, url, path };
+    const b64 = await blobToBase64(file);
+    const form = new FormData();
+    form.append('key', apiKey);
+    form.append('image', String(b64).split(',')[1]);
+    form.append('name', 'aura-' + Date.now());
+    const res = await fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: form });
+    const j = await res.json();
+    if (j && j.success && j.data && j.data.url) return { ok: true, url: j.data.url };
+    return { ok: false, error: (j && j.error && j.error.message) || 'আপলোড ব্যর্থ হয়েছে।' };
   } catch (e) {
-    return { ok: false, error: friendlyStorageError(e) };
+    return { ok: false, error: 'আপলোড ব্যর্থ — ইন্টারনেট চেক করুন।' };
   }
 }
 
-/* Storage URL/path থেকে ফাইল মোছা (best-effort) */
+/* ImgBB-তে ডিলিট tracking জটিল — ছবি ওদের সার্ভারেই থাকে (ফ্রি লিমিটে সমস্যা নেই) */
 export async function deleteProductImage(urlOrPath) {
-  const f = await fb();
-  if (!f || !urlOrPath) return { ok: false };
-  try {
-    let ref;
-    if (/^products\//.test(urlOrPath)) ref = f.sFns.ref(f.storage, urlOrPath);
-    else {
-      const m = String(urlOrPath).match(/\/o\/([^?]+)/);
-      const path = m ? decodeURIComponent(m[1]) : null;
-      if (!path || !/^products\//.test(path)) return { ok: false };
-      ref = f.sFns.ref(f.storage, path);
-    }
-    await f.sFns.deleteObject(ref);
-    return { ok: true };
-  } catch { return { ok: false }; }
+  return { ok: true, skipped: true };
 }
 
 export async function fetchStaffList() {

@@ -12,7 +12,7 @@ import {
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
   createStaffAccount, uploadProductImage, deleteProductImage,
   sizeQty, totalStock, tabsForRole, orderFullForRole, OWNER_UID,
-} from './firebase.js?v=20261016';
+} from './firebase.js?v=20261017';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
 /* admin-import.js (classic script) global: window.AuraImport */
@@ -357,6 +357,8 @@ async function handleImgFiles(e) {
   const files = [...(e.target.files || [])];
   e.target.value = '';
   if (!files.length) return;
+  const apiKey = settings && settings.imgbbKey ? settings.imgbbKey : '';
+  if (!apiKey) { toast('আগে Settings → ImgBB API Key দিন।'); return; }
   const prev = $('#imgUploadPrev');
   const pid = editingId || 'new_' + Date.now();
   for (const file of files) {
@@ -367,7 +369,7 @@ async function handleImgFiles(e) {
     prev.appendChild(chip);
     try {
       const blob = await compressImage(file);
-      const up = await uploadProductImage(new File([blob], 'img.jpg', { type: 'image/jpeg' }), pid);
+      const up = await uploadProductImage(new File([blob], 'img.jpg', { type: 'image/jpeg' }), pid, apiKey);
       if (up.ok) {
         chip.remove();
         addImgRow(up.url);
@@ -614,6 +616,7 @@ function renderSettings() {
   v('#sfEmail', settings.email); v('#sfAddress', settings.address);
   const soc = settings.social || {};
   v('#sfFb', soc.facebook); v('#sfIg', soc.instagram); v('#sfYt', soc.youtube);
+  v('#sfImgbb', settings.imgbbKey);
 }
 async function saveSettingsForm() {
   const err = $('#settingsErr');
@@ -630,6 +633,7 @@ async function saveSettingsForm() {
       facebook: $('#sfFb').value.trim(), instagram: $('#sfIg').value.trim(),
       youtube: $('#sfYt').value.trim(),
     },
+    imgbbKey: $('#sfImgbb').value.trim(),
   };
   err.textContent = '';
   $('#settingsSave').disabled = true;

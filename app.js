@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261016';
-import * as fb from './firebase.js?v=20261016'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261017';
+import * as fb from './firebase.js?v=20261017'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -29,6 +29,7 @@ function discount(p) { if (!p.oldPrice || p.oldPrice <= p.price) return 0; retur
 function mainOf(slug) { return (typeof MAIN_CATEGORIES !== 'undefined' ? MAIN_CATEGORIES : []).find((m) => m.slug === slug) || { slug, bn: slug, en: slug, img: FALLBACK_IMG, subs: [] }; }
 function subOf(mainSlug, subSlug) { const m = mainOf(mainSlug); const s = m.subs.find((x) => x.slug === subSlug); return s ? { ...s, main: mainSlug } : { slug: subSlug, bn: subSlug, en: subSlug, main: mainSlug }; }
 function visibleMains() { const hidden = (SETTINGS.hiddenCategories || []); return MAIN_CATEGORIES.filter((m) => !hidden.includes(m.slug)); }
+function catVisible(p) { const hidden = (SETTINGS.hiddenCategories || []); return !hidden.includes(p.main); }
 function prodMainLabel(p) { const m = mainOf(p.main); const s = subOf(p.main, p.sub); return (LANG === 'bn' ? m.bn : m.en) + ' › ' + (LANG === 'bn' ? s.bn : s.en); }
 function prodById(id) { return PRODUCTS.find((p) => p.id === id); }
 function stars(n) { return '★★★★★'.slice(0, Math.round(n)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(n)); }
@@ -417,7 +418,7 @@ function onSearchInput(e) {
   if (q.length < 2) { box.classList.remove('open'); return; }
   /* exact SKU match ranks first */
   const exactSku = PRODUCTS.find((p) => p.visible !== false && (p.sku || '').toLowerCase() === q);
-  const hits = PRODUCTS.filter((p) => p.visible !== false && p !== exactSku && (p.nameEn + ' ' + p.nameBn + ' ' + (p.sku || '') + ' ' + prodMainLabel(p)).toLowerCase().includes(q)).slice(0, 6);
+  const hits = PRODUCTS.filter((p) => p.visible !== false && catVisible(p) && p !== exactSku && (p.nameEn + ' ' + p.nameBn + ' ' + (p.sku || '') + ' ' + prodMainLabel(p)).toLowerCase().includes(q)).slice(0, 6);
   const ordered = exactSku ? [exactSku, ...hits].slice(0, 6) : hits;
   if (!ordered.length) { box.classList.remove('open'); return; }
   box.innerHTML = ordered.map((p) => `<a href="#product/${p.id}"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}${p.sku ? `<small class="s-sku">${esc(p.sku)}</small>` : ''}</span><span class="s-price">${fmt(p.price)}</span></a>`).join('');
@@ -500,8 +501,8 @@ function view404() {
 
 /* ---------------- HOME (compact) ---------------- */
 function viewHome() {
-  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && !isOutOfStock(p) && p.visible !== false).slice(0, 4);
-  const best = PRODUCTS.filter((p) => p.tag === 'best-seller' && p.visible !== false).slice(0, 4);
+  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && !isOutOfStock(p) && p.visible !== false && catVisible(p)).slice(0, 4);
+  const best = PRODUCTS.filter((p) => p.tag === 'best-seller' && p.visible !== false && catVisible(p)).slice(0, 4);
   const mains = visibleMains();
   return `
   <div class="hero-carousel" id="heroCarousel">
@@ -547,7 +548,7 @@ function viewShop(params) {
   const q = (params.get('q') || '').toLowerCase();
   const sort = params.get('sort') || 'popular';
   const maxPrice = parseInt(params.get('max') || '0', 10);
-  let list = PRODUCTS.filter((p) => p.stock >= 0 && p.visible !== false);
+  let list = PRODUCTS.filter((p) => p.stock >= 0 && p.visible !== false && catVisible(p));
   if (main) list = list.filter((p) => p.main === main);
   if (sub) list = list.filter((p) => p.sub === sub);
   if (q) {
@@ -570,7 +571,7 @@ function viewShop(params) {
   const heading = main ? (sub ? `${mainLabel} › ${subLabel}` : mainLabel) : (q ? t('searchRes', { q }) : t('shop'));
   const mains = visibleMains();
   const subs = main ? mainOf(main).subs : [];
-  const allPrices = PRODUCTS.filter((x) => x.visible !== false).map((x) => x.price);
+  const allPrices = PRODUCTS.filter((x) => x.visible !== false && catVisible(x)).map((x) => x.price);
   const pMin = Math.min(...allPrices), pMax = Math.max(...allPrices);
   const sliderVal = maxPrice > 0 ? Math.min(maxPrice, pMax) : pMax;
   return `<section class="section"><div class="crumb"><a href="#home">${t('home')}</a> › <a href="#shop">${t('shop')}</a>${main ? ` › <a href="#shop?main=${main}">${esc(mainLabel)}</a>` : ''}${sub ? ` › <span>${esc(subLabel)}</span>` : ''}</div>
@@ -603,8 +604,8 @@ function viewProduct(id) {
   const name = LANG === 'bn' ? p.nameBn : p.nameEn;
   const desc = LANG === 'bn' ? p.descBn : p.descEn;
   const off = discount(p);
-  const related = [...PRODUCTS.filter((x) => x.visible !== false && x.main === p.main && x.sub === p.sub && x.id !== p.id),
-    ...PRODUCTS.filter((x) => x.visible !== false && x.main === p.main && x.sub !== p.sub && x.id !== p.id)].slice(0, 4);
+  const related = [...PRODUCTS.filter((x) => x.visible !== false && catVisible(x) && x.main === p.main && x.sub === p.sub && x.id !== p.id),
+    ...PRODUCTS.filter((x) => x.visible !== false && catVisible(x) && x.main === p.main && x.sub !== p.sub && x.id !== p.id)].slice(0, 4);
   const seedRv = seedReviews[p.id] || [];
   const imgs = (Array.isArray(p.images) && p.images.length ? p.images : [p.img]).filter(Boolean);
   const waText = encodeURIComponent(`আসসালামু আলাইকুম! আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n${name} (SKU: ${p.sku || '-'}) — ${fmt(p.price)}\n${location.href}`);
@@ -920,7 +921,7 @@ function renderTrackStatusOnly(s) {
 
 /* ================= WISHLIST ================= */
 function viewWishlist() {
-  const list = PRODUCTS.filter((p) => wish.includes(p.id));
+  const list = PRODUCTS.filter((p) => wish.includes(p.id) && catVisible(p));
   return `<section class="section"><h2 style="color:var(--navy)">${t('wishT')}</h2>
   ${list.length ? `<div class="prod-row" style="margin-top:16px">${list.map(prodCard).join('')}</div>` : `<div class="empty"><h3>${t('wishEmpty')}</h3><p>${t('wishEmptyP')}</p><a class="btn" href="#shop">${t('shopCta')}</a></div>`}</section>`;
 }

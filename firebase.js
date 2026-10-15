@@ -146,10 +146,6 @@ export async function signUp(email, password, name) {
     return { ok: false, error: friendlyAuthError(e) };
   }
 }
-  } catch (e) {
-    return { ok: false, error: friendlyAuthError(e) };
-  }
-}
 
 export async function signIn(email, password) {
   const f = await fb();

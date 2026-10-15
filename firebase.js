@@ -15,12 +15,12 @@
 */
 
 const FIREBASE_CONFIG = {
-  apiKey: 'PASTE_YOUR_API_KEY_HERE',
-  authDomain: 'PASTE_YOUR_PROJECT_ID_HERE.firebaseapp.com',
-  projectId: 'PASTE_YOUR_PROJECT_ID_HERE',
-  storageBucket: 'PASTE_YOUR_PROJECT_ID_HERE.appspot.com',
-  messagingSenderId: 'PASTE_YOUR_SENDER_ID_HERE',
-  appId: 'PASTE_YOUR_APP_ID_HERE',
+  apiKey: 'AIzaSyDo4hHOQ4ias2uYgZdXdhBsQRzwpsb-6SU',
+  authDomain: 'gen-lang-client-0710305331.firebaseapp.com',
+  projectId: 'gen-lang-client-0710305331',
+  storageBucket: 'gen-lang-client-0710305331.firebasestorage.app',
+  messagingSenderId: '173208116710',
+  appId: '1:173208116710:web:5fbd5c31b7be0e4f058a27',
 };
 
 const PLACEHOLDER = 'PASTE_YOUR_';

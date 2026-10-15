@@ -64,7 +64,7 @@ export function isOutOfStock(p) {
 
 /* ---------- role → tab presets (staff doc-এ tabs না থাকলে fallback) ---------- */
 export const ROLE_TABS_PRESET = {
-  manager: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import'],
+  manager: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'combos', 'newsletter', 'import'],
   assistant: ['orders'],
 };
 export function tabsForRole(role) { return [...(ROLE_TABS_PRESET[role] || [])]; }
@@ -485,6 +485,64 @@ export async function fetchHomepageReviews() {
     snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
     return list;
   } catch (e) { console.warn('[AURA] fetchHomepageReviews failed:', e); return []; }
+}
+
+/* ================= COMBOS ================= */
+const COMBOS = 'combos';
+
+export async function fetchCombos() {
+  const f = await fb();
+  if (!f) return [];
+  try {
+    const q = f.fFns.query(
+      f.fFns.collection(f.db, COMBOS),
+      f.fFns.where('visible', '==', true),
+      f.fFns.orderBy('createdAt', 'desc'),
+    );
+    const snap = await f.fFns.getDocs(q);
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return list;
+  } catch (e) { console.warn('[AURA] fetchCombos failed:', e); return []; }
+}
+
+export async function fetchAllCombos() {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const q = f.fFns.query(
+      f.fFns.collection(f.db, COMBOS),
+      f.fFns.orderBy('createdAt', 'desc'),
+    );
+    const snap = await f.fFns.getDocs(q);
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return { ok: true, combos: list };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+export async function saveCombo(combo) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const data = { ...combo, updatedAt: f.fFns.serverTimestamp() };
+    if (combo.id) {
+      await f.fFns.updateDoc(f.fFns.doc(f.db, COMBOS, combo.id), data);
+      return { ok: true, id: combo.id };
+    }
+    data.createdAt = f.fFns.serverTimestamp();
+    const ref = await f.fFns.addDoc(f.fFns.collection(f.db, COMBOS), data);
+    return { ok: true, id: ref.id };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+export async function deleteCombo(id) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.deleteDoc(f.fFns.doc(f.db, COMBOS, id));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
 /* ================= STAFF ROLES ================= */

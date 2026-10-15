@@ -8,6 +8,7 @@ import {
   fetchSettings, saveSettings,
   fetchOrders, updateOrderStatus, updateOrderStatusByOrderId, setOrderPaid, setOrderPaidByOrderId,
   fetchAllReviews, deleteReview, submitReview, fetchHomepageReviews,
+  fetchAllCombos, saveCombo, deleteCombo,
   fetchNewsletterNumbers,
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
   createStaffAccount, uploadProductImage, deleteProductImage,
@@ -131,6 +132,7 @@ function initTabs() {
     const t = b.dataset.tab;
     if (t === 'orders') renderOrders();
     if (t === 'reviews') loadReviews();
+    if (t === 'combos') loadCombos();
     if (t === 'newsletter') loadNewsletter();
     if (t === 'categories') renderCategories();
     if (t === 'settings') renderSettings();
@@ -662,6 +664,115 @@ async function loadReviews() {
   };
 }
 
+/* ================= COMBOS ================= */
+let combos = [], editingComboId = null, comboImgUrl = '', comboItems = {};
+function comboProdRow(p) {
+  const sel = comboItems[p.id];
+  return `<div class="cb-row" style="display:flex; gap:8px; align-items:center; padding:6px 4px; border-bottom:1px solid #f1f5f9">
+    <input type="checkbox" data-cbp="${esc(p.id)}" ${sel ? 'checked' : ''} style="width:18px; height:18px">
+    <span style="flex:1; font-size:13px">${esc(p.nameBn || p.nameEn)} <small class="muted">${fmt(p.price)}</small></span>
+    <input type="number" data-cbq="${esc(p.id)}" value="${sel ? sel.qty : 1}" min="1" max="99" style="width:56px; padding:4px; border:1px solid var(--line); border-radius:6px" ${sel ? '' : 'disabled'}>
+  </div>`;
+}
+function renderComboProdList() {
+  const q = ($('#cbProdSearch').value || '').trim().toLowerCase();
+  const list = products.filter((p) => !q || ((p.nameBn || '') + ' ' + (p.nameEn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
+  $('#cbProdList').innerHTML = list.slice(0, 60).map(comboProdRow).join('') || '<p class="muted">কোনো প্রোডাক্ট নেই।</p>';
+  $$('#cbProdList [data-cbp]').forEach((cb) => cb.onchange = () => {
+    const id = cb.dataset.cbp;
+    if (cb.checked) comboItems[id] = { id, qty: 1 };
+    else delete comboItems[id];
+    renderComboProdList();
+  });
+  $$('#cbProdList [data-cbq]').forEach((inp) => inp.onchange = () => {
+    const id = inp.dataset.cbq;
+    if (comboItems[id]) comboItems[id].qty = Math.max(1, +inp.value || 1);
+  });
+}
+function resetComboForm() {
+  editingComboId = null; comboImgUrl = ''; comboItems = {};
+  $('#comboFormTitle').textContent = 'নতুন কম্বো অফার';
+  $('#cbNameBn').value = ''; $('#cbNameEn').value = ''; $('#cbPrice').value = ''; $('#cbOldPrice').value = '';
+  $('#cbVisible').checked = true; $('#cbImgPrev').style.display = 'none';
+  $('#cbCancel').hidden = true;
+  renderComboProdList();
+}
+async function loadCombos() {
+  const r = await fetchAllCombos();
+  combos = r.ok ? r.combos : [];
+  $('#comboList').innerHTML = combos.map((c) => {
+    const names = (c.items || []).map((i) => { const p = products.find((x) => x.id === i.id); return (p ? (p.nameBn || p.nameEn) : i.id) + (i.qty > 1 ? ' ×' + i.qty : ''); }).join(', ');
+    return `<div class="order-card"><div class="order-head">
+      <img src="${esc(c.img || '')}" style="width:52px; height:36px; object-fit:cover; border-radius:6px" onerror="this.style.visibility='hidden'">
+      <b style="flex:1">${esc(c.nameBn || c.nameEn)}</b><span>${fmt(c.price)}</span>
+      <button class="pill ${c.visible !== false ? 'ok' : 'no'}" data-cbvis="${esc(c.id)}">${c.visible !== false ? 'চালু' : 'বন্ধ'}</button>
+      <button class="btn btn-outline btn-sm" data-cbedit="${esc(c.id)}">এডিট</button>
+      <button class="btn btn-outline btn-sm" data-cbdel="${esc(c.id)}">ডিলিট</button></div>
+      <div class="order-meta"><small>${esc(names)}</small></div></div>`;
+  }).join('') || '<p class="muted">কোনো কম্বো নেই।</p>';
+  $$('#comboList [data-cbdel]').forEach((b) => b.onclick = async () => {
+    if (!confirm('কম্বোটি ডিলিট করবেন?')) return;
+    const d = await deleteCombo(b.dataset.cbdel);
+    if (d.ok) { toast('ডিলিট হয়েছে।'); loadCombos(); } else toast('ব্যর্থ।');
+  });
+  $$('#comboList [data-cbvis]').forEach((b) => b.onclick = async () => {
+    const c = combos.find((x) => x.id === b.dataset.cbvis);
+    if (!c) return;
+    const r = await saveCombo({ ...c, visible: !(c.visible !== false) });
+    if (r.ok) { loadCombos(); } else toast('ব্যর্থ।');
+  });
+  $$('#comboList [data-cbedit]').forEach((b) => b.onclick = () => {
+    const c = combos.find((x) => x.id === b.dataset.cbedit);
+    if (!c) return;
+    editingComboId = c.id; comboImgUrl = c.img || '';
+    comboItems = {};
+    (c.items || []).forEach((i) => { comboItems[i.id] = { id: i.id, qty: i.qty || 1 }; });
+    $('#comboFormTitle').textContent = 'কম্বো এডিট করুন';
+    $('#cbNameBn').value = c.nameBn || ''; $('#cbNameEn').value = c.nameEn || '';
+    $('#cbPrice').value = c.price || ''; $('#cbOldPrice').value = c.oldPrice || '';
+    $('#cbVisible').checked = c.visible !== false;
+    if (comboImgUrl) { $('#cbImgPrev').src = comboImgUrl; $('#cbImgPrev').style.display = ''; }
+    $('#cbCancel').hidden = false;
+    renderComboProdList();
+    window.scrollTo(0, 0);
+  });
+}
+function initCombos() {
+  $('#cbProdSearch').addEventListener('input', renderComboProdList);
+  $('#cbCancel').onclick = resetComboForm;
+  $('#cbImgBtn').onclick = () => $('#cbImgFile').click();
+  $('#cbImgFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const key = (settings && settings.imgbbKey) || '';
+    if (!key) { toast('আগে Settings থেকে ImgBB API Key সেভ করুন।'); return; }
+    toast('আপলোড হচ্ছে...');
+    try {
+      const url = await uploadBannerImage(f, key);
+      if (url) { comboImgUrl = url; $('#cbImgPrev').src = url; $('#cbImgPrev').style.display = ''; toast('আপলোড হয়েছে।'); }
+      else toast('আপলোড ব্যর্থ।');
+    } catch { toast('আপলোড ব্যর্থ।'); }
+  };
+  $('#cbSave').onclick = async () => {
+    const nameBn = $('#cbNameBn').value.trim(), nameEn = $('#cbNameEn').value.trim();
+    const price = +$('#cbPrice').value || 0;
+    const items = Object.values(comboItems);
+    if (!nameBn || !nameEn) { toast('নাম দিন।'); return; }
+    if (!price) { toast('কম্বো দাম দিন।'); return; }
+    if (!items.length) { toast('অন্তত ১টি প্রোডাক্ট বাছুন।'); return; }
+    const data = {
+      nameBn, nameEn, price, oldPrice: +$('#cbOldPrice').value || 0,
+      img: comboImgUrl, items, visible: $('#cbVisible').checked,
+    };
+    if (editingComboId) data.id = editingComboId;
+    const r = await saveCombo(data);
+    if (r.ok) { toast('সেভ হয়েছে।'); resetComboForm(); loadCombos(); }
+    else toast('ব্যর্থ: ' + (r.error || ''));
+  };
+  resetComboForm();
+}
+
 /* ================= NEWSLETTER ================= */
 async function loadNewsletter() {
   const r = await fetchNewsletterNumbers();
@@ -1046,6 +1157,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initImport();
   $('#catSave').addEventListener('click', saveCategories);
   bindCatImgUpload();
+  initCombos();
   $('#orderSearch').addEventListener('input', renderOrders);
   $('#orderFilter').addEventListener('change', renderOrders);
   $('#settingsSave').addEventListener('click', saveSettingsForm);

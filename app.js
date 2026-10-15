@@ -1,7 +1,7 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261017';
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261017';
 import * as fb from './firebase.js?v=20261017'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
@@ -46,6 +46,14 @@ const I18N = {
   searchPh: { bn: 'প্রোডাক্ট খুঁজুন...', en: 'Search products...' },
   demoNote: { bn: 'ডেমো মোড: Firebase কনফিগ করা হয়নি — অর্ডার এই ডিভাইসে সংরক্ষিত হবে। (firebase.js-এ কনফিগ যোগ করুন)', en: 'Demo mode: Firebase is not configured — orders will be saved on this device only. (add config in firebase.js)' },
   drawerMenu: { bn: 'মেনু', en: 'Menu' },
+  followUs: { bn: 'ফলো করুন:', en: 'Follow Us:' },
+  offers: { bn: 'অফার', en: 'OFFERS' },
+  offersTitle: { bn: 'সব অফার', en: 'All Offers' },
+  offersSub: { bn: 'ডিসকাউন্ট ও কম্বো অফার', en: 'Discounts & combo offers' },
+  comboT: { bn: 'কম্বো অফার', en: 'Combo Offers' },
+  discountT: { bn: 'ডিসকাউন্ট', en: 'Discounted' },
+  noOffers: { bn: 'এখন কোনো অফার নেই।', en: 'No offers right now.' },
+  comboIncludes: { bn: 'যা যা আছে:', en: 'Includes:' },
   drawerCats: { bn: 'ক্যাটাগরি', en: 'Categories' },
   drawerInfo: { bn: 'তথ্য', en: 'Information' },
   closeLbl: { bn: 'বন্ধ করুন', en: 'Close' },
@@ -451,6 +459,7 @@ function route() {
   buildNav();
   if (path === 'home') app.innerHTML = viewHome();
   else if (path === 'shop') app.innerHTML = viewShop(params);
+  else if (path === 'offers') app.innerHTML = viewOffers();
   else if (path.startsWith('product/')) app.innerHTML = viewProduct(path.split('/')[1]);
   else if (path === 'cart') app.innerHTML = viewCart();
   else if (path === 'checkout') app.innerHTML = viewCheckout();
@@ -470,6 +479,7 @@ function route() {
   updateBadges();
   closeDrawer();
   loadHomeTestimonials();
+  renderOffersCombos();
   if (pathChanged) window.scrollTo(0, 0);
   else if (path === 'shop') { const g = $('#shopGrid'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
@@ -563,6 +573,53 @@ function viewHome() {
 }
 
 /* ---------------- SHOP ---------------- */
+/* ================= OFFERS ================= */
+let CACHED_COMBOS = null;
+async function loadCombos() {
+  if (CACHED_COMBOS) return CACHED_COMBOS;
+  if (!isConfigured()) return [];
+  try { CACHED_COMBOS = await fetchCombos(); } catch { CACHED_COMBOS = []; }
+  return CACHED_COMBOS;
+}
+function viewOffers() {
+  const discounted = PRODUCTS.filter((p) => p.visible !== false && catVisible(p) && p.oldPrice > p.price);
+  return `<section class="section"><div class="section-head"><div><h2>${t('offersTitle')}</h2><p style="color:var(--muted); font-size:14px; margin:4px 0 0">${t('offersSub')}</p></div></div>
+  <div id="offersCombos"></div>
+  ${discounted.length ? `<h3 style="margin:20px 0 12px">${t('discountT')}</h3><div class="prod-grid">${discounted.map(prodCard).join('')}</div>`
+    : `<div class="empty"><p>${t('noOffers')}</p></div>`}
+  </section>`;
+}
+async function renderOffersCombos() {
+  const box = $('#offersCombos');
+  if (!box) return;
+  const combos = await loadCombos();
+  if (!combos.length) return;
+  box.innerHTML = `<h3 style="margin:0 0 12px">${t('comboT')}</h3><div class="prod-grid">${combos.map((c) => {
+    const items = (c.items || []).map((i) => { const p = prodById(i.id); return p ? esc(LANG === 'bn' ? p.nameBn : p.nameEn) + (i.qty > 1 ? ' ×' + i.qty : '') : ''; }).filter(Boolean);
+    const off = c.oldPrice > c.price ? Math.round((1 - c.price / c.oldPrice) * 100) : 0;
+    return `<article class="p-card"><div class="p-img"><img src="${esc(c.img || '')}" alt="${esc(LANG === 'bn' ? c.nameBn : c.nameEn)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy">${off ? `<span class="p-off">-${off}%</span>` : ''}</div>
+    <div class="p-body"><div class="p-cat">🎁 ${t('comboT')}</div><h3 class="p-name">${esc(LANG === 'bn' ? c.nameBn : c.nameEn)}</h3>
+    <div class="p-sub" style="font-size:12px; color:var(--muted)">${t('comboIncludes')} ${esc(items.join(', '))}</div>
+    <div class="price"><b>${fmt(c.price)}</b>${c.oldPrice > c.price ? `<s>${fmt(c.oldPrice)}</s>` : ''}</div>
+    <button class="add-btn" data-combo="${esc(c.id)}">${t('addCart')}</button></div></article>`;
+  }).join('')}</div>`;
+  $$('#offersCombos [data-combo]').forEach((b) => b.addEventListener('click', () => addComboToCart(b.dataset.combo)));
+}
+function addComboToCart(id) {
+  const c = (CACHED_COMBOS || []).find((x) => x.id === id);
+  if (!c || !c.items) return;
+  c.items.forEach((i) => {
+    const p = prodById(i.id);
+    if (!p || isOutOfStock(p)) return;
+    const ex = cart.find((x) => x.id === i.id && !x.size);
+    if (ex) ex.qty += (i.qty || 1);
+    else cart.push({ id: i.id, qty: i.qty || 1 });
+  });
+  saveLS('aura_cart', cart);
+  updateBadges();
+  toast(t('addedCart'));
+}
+
 function viewShop(params) {
   const main = params.get('main') || '';
   const sub = params.get('sub') || '';
@@ -1258,13 +1315,24 @@ function buildDrawer() {
   const nav = $('#drawerNav');
   if (!nav) return;
   const row = (href, label, color) => `<a href="${href}"><span class="d-dot" style="background:${color}"></span><span class="d-lbl">${label}</span><span class="d-ch">›</span></a>`;
+  /* social links at top */
+  const soc = (SETTINGS && SETTINGS.social) || {};
+  const socIcons = { facebook: 'f', instagram: '◉', youtube: '▶' };
+  const socHtml = ['facebook', 'instagram', 'youtube'].filter((k) => soc[k]).map((k) =>
+    `<a href="${esc(soc[k])}" target="_blank" rel="noopener" aria-label="${k}" class="d-soc">${socIcons[k]}</a>`).join('');
+  /* main menu: Home, visible categories, OFFERS */
   const cats = visibleMains().map((m) => row(`#shop?main=${m.slug}`, esc(LANG === 'bn' ? m.bn : m.en), '#c9a227')).join('');
-  nav.innerHTML = `<div class="d-sec">`
+  nav.innerHTML = `${socHtml ? `<div class="d-follow"><span>${t('followUs')}</span><div class="d-soc-row">${socHtml}</div></div>` : ''}`
+    + `<div class="d-sec">`
+    + row('#home', t('home'), '#2e7d32')
+    + cats
+    + row('#offers', t('offers'), '#e2136e')
+    + `</div><div class="d-sec">`
     + row('#track', t('track'), '#c9a227')
     + row('#signin', t('signin'), '#3b5aa0')
     + row('#wishlist', t('wishlist'), '#c0392b')
     + row('#shop', t('shop'), '#2e7d32')
-    + `</div><div class="drawer-h">${t('drawerCats')}</div><div class="d-sec d-cats">${cats}</div>`;
+    + `</div>`;
   syncDrawerLang();
 }
 function syncDrawerLang() {

@@ -58,6 +58,7 @@
     <button data-tab="categories">ক্যাটাগরি</button>
     <button data-tab="orders">অর্ডার <span class="tab-badge" id="ordersBadge" hidden></span></button>
     <button data-tab="reviews">রিভিউ</button>
+    <button data-tab="combos">কম্বো অফার</button>
     <button data-tab="newsletter">নিউজলেটার</button>
     <button data-tab="import">ইমপোর্ট</button>
     <button data-tab="staff">স্টাফ</button>
@@ -155,6 +156,34 @@
         </select>
       </div>
       <div id="orderList" class="order-list"></div>
+    </section>
+
+    <!-- COMBOS -->
+    <section id="tab-combos" class="tab-page" hidden>
+      <div class="card" style="margin-bottom:16px">
+        <h3 id="comboFormTitle">নতুন কম্বো অফার</h3>
+        <div class="form-grid">
+          <label>বাংলা নাম *<input id="cbNameBn"></label>
+          <label>English নাম *<input id="cbNameEn"></label>
+          <label>কম্বো দাম *<input id="cbPrice" type="number" min="0"></label>
+          <label>আগের দাম<input id="cbOldPrice" type="number" min="0"></label>
+        </div>
+        <label style="display:block; margin-top:8px">ছবি <span class="muted small">(ImgBB আপলোড)</span></label>
+        <div style="display:flex; gap:8px; align-items:center; margin:6px 0">
+          <img id="cbImgPrev" style="width:80px; height:50px; object-fit:cover; border-radius:6px; display:none">
+          <button type="button" class="btn btn-outline btn-sm" id="cbImgBtn">ছবি আপলোড</button>
+          <input type="file" id="cbImgFile" accept="image/*" hidden>
+        </div>
+        <label style="display:block; margin-top:8px">প্রোডাক্ট বাছুন *<span class="muted small"> (টিক দিন + সংখ্যা)</span></label>
+        <input id="cbProdSearch" placeholder="প্রোডাক্ট খুঁজুন..." style="width:100%; padding:8px; margin:6px 0; border:1px solid var(--line); border-radius:8px">
+        <div id="cbProdList" style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:8px"></div>
+        <label style="display:flex; align-items:center; gap:6px; margin-top:8px"><input type="checkbox" id="cbVisible" checked style="width:18px; height:18px"> ওয়েবসাইটে দেখান</label>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <button class="btn btn-sm" id="cbSave">সেভ করুন</button>
+          <button class="btn btn-outline btn-sm" id="cbCancel" hidden>বাতিল</button>
+        </div>
+      </div>
+      <div id="comboList" class="order-list"></div>
     </section>
 
     <!-- REVIEWS -->

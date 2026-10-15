@@ -34,7 +34,11 @@ const C = {
   newsletter: 'newsletterNumbers',
   reviews: 'reviews',
   users: 'users',
+  staff: 'staff',
 };
+
+/* Owner UID — firestore.rules-এর ownerUid()-এর সাথে মিলিয়ে রাখুন */
+export const OWNER_UID = 'SNSSuBuLbgRSQy4moDwz6rWnYmv1';
 
 let _fb = null;      /* { app, auth, db, aFns, fFns } */
 let _initTried = false;
@@ -394,6 +398,57 @@ export async function deleteReview(id) {
   if (!f) return { ok: false, demo: true };
   try {
     await f.fFns.deleteDoc(f.fFns.doc(f.db, C.reviews, id));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* ================= STAFF ROLES ================= */
+/* Role: 'owner' | 'manager' | 'assistant' | 'none' */
+
+export async function fetchMyRole() {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true, role: 'none' };
+  const user = f.auth.currentUser;
+  if (!user) return { ok: true, role: 'none' };
+  if (user.uid === OWNER_UID) return { ok: true, role: 'owner' };
+  try {
+    const snap = await f.fFns.getDoc(f.fFns.doc(f.db, C.staff, user.uid));
+    const role = snap.exists() ? (snap.data().role || 'none') : 'none';
+    return { ok: true, role: ['manager', 'assistant'].includes(role) ? role : 'none' };
+  } catch (e) {
+    return { ok: false, role: 'none', error: String((e && e.message) || e) };
+  }
+}
+
+export async function fetchStaffList() {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const snap = await f.fFns.getDocs(f.fFns.collection(f.db, C.staff));
+    const list = [];
+    snap.forEach((d) => list.push({ uid: d.id, ...d.data() }));
+    return { ok: true, staff: list };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+export async function saveStaff(uid, data) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.setDoc(
+      f.fFns.doc(f.db, C.staff, uid),
+      { ...data, updatedAt: f.fFns.serverTimestamp() },
+      { merge: true },
+    );
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+export async function removeStaff(uid) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.deleteDoc(f.fFns.doc(f.db, C.staff, uid));
     return { ok: true };
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }

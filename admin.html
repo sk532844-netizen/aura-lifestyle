@@ -47,6 +47,7 @@
     </div>
     <div class="a-user">
       <span id="adminEmail"></span>
+      <span class="role-badge" id="roleBadge"></span>
       <button class="btn btn-outline btn-sm" id="logoutBtn">লগআউট</button>
     </div>
   </header>
@@ -58,6 +59,8 @@
     <button data-tab="orders">অর্ডার <span class="tab-badge" id="ordersBadge" hidden></span></button>
     <button data-tab="reviews">রিভিউ</button>
     <button data-tab="newsletter">নিউজলেটার</button>
+    <button data-tab="import">ইমপোর্ট</button>
+    <button data-tab="staff">স্টাফ</button>
     <button data-tab="settings">সেটিংস</button>
   </nav>
 
@@ -156,6 +159,64 @@
       <div id="nlList" class="nl-list"></div>
     </section>
 
+    <!-- IMPORT -->
+    <section id="tab-import" class="tab-page" hidden>
+      <div class="card">
+        <h3>বাল্ক প্রোডাক্ট ইমপোর্ট</h3>
+        <p class="muted">CSV বা Excel (.xlsx) ফাইল থেকে একসাথে অনেক প্রোডাক্ট যোগ করুন। আগে প্রিভিউ দেখে তারপর ইমপোর্ট করুন।</p>
+        <div class="imp-steps">
+          <div class="imp-step">
+            <b>১. ফাইল বাছুন</b>
+            <div class="row-gap">
+              <input type="file" id="impFile" accept=".csv,.xlsx,.xls" class="file-input">
+              <button class="btn btn-outline btn-sm" id="impTemplate">টেমপ্লেট ডাউনলোড</button>
+            </div>
+            <p class="muted small">কলাম: nameBn, nameEn, sku, price, oldPrice, main, sub, stock, descBn, descEn, img, images, sizes, tag, visible</p>
+          </div>
+          <div class="imp-step" id="impPreviewWrap" hidden>
+            <b>২. প্রিভিউ ও যাচাই</b>
+            <div class="row-gap wrap" style="margin:8px 0">
+              <label class="check"><input type="checkbox" id="impUpdateDup"> ডুপ্লিকেট SKU থাকলে আপডেট করো</label>
+              <button class="btn" id="impRun" disabled>ইমপোর্ট করুন</button>
+            </div>
+            <div id="impSummary" class="imp-summary"></div>
+            <div class="table-scroll"><table class="imp-table" id="impTable">
+              <thead><tr><th>#</th><th>নাম</th><th>SKU</th><th>দাম</th><th>স্ট্যাটাস</th><th>বিস্তারিত</th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+          <div class="imp-step" id="impResultWrap" hidden>
+            <b>৩. ফলাফল</b>
+            <div id="impResult" class="imp-summary"></div>
+            <div id="impProgress" class="progress" hidden><div class="progress-bar" id="impProgressBar"></div></div>
+          </div>
+        </div>
+        <div class="err" id="impErr"></div>
+      </div>
+    </section>
+
+    <!-- STAFF -->
+    <section id="tab-staff" class="tab-page" hidden>
+      <div class="card">
+        <h3>স্টাফ ম্যানেজমেন্ট <span class="muted small">(শুধু মালিক)</span></h3>
+        <p class="muted">স্টাফের Firebase অ্যাকাউন্ট আগে <b>Firebase Console → Authentication → Add user</b> থেকে বানান, তারপর এখানে UID + role দিন। Login panel একটাই — role অনুযায়ী tab দেখা যাবে।</p>
+        <div class="form-grid">
+          <label>ইমেইল<input id="stEmail" type="email" placeholder="staff@example.com"></label>
+          <label>Firebase UID<input id="stUid" placeholder="UID পেস্ট করুন"></label>
+          <label>Role<select id="stRole"><option value="manager">ম্যানেজার</option><option value="assistant">সহকারী</option></select></label>
+        </div>
+        <div class="row-gap" style="margin-top:10px">
+          <button class="btn" id="stAdd">স্টাফ যোগ করুন</button>
+        </div>
+        <div class="err" id="stErr"></div>
+        <h4 style="margin-top:16px">বর্তমান স্টাফ</h4>
+        <div class="table-scroll"><table class="imp-table" id="stTable">
+          <thead><tr><th>ইমেইল</th><th>UID</th><th>Role</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+
     <!-- SETTINGS -->
     <section id="tab-settings" class="tab-page" hidden>
       <div id="settingsSetup" class="setup-note" hidden>
@@ -194,6 +255,8 @@
 
 <div class="toast" id="toast"></div>
 <script src="data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="admin-import.js"></script>
 <script type="module" src="admin.js"></script>
 </body>
 </html>

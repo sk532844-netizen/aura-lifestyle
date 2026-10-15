@@ -1,6 +1,7 @@
 /* AURA LIFESTYLE — Admin Panel logic.
    Firebase email/password login (no embedded password).
-   Sections: Dashboard, Products, Categories, Orders, Reviews, Newsletter, Settings. */
+   Role-based tabs: owner (all), manager (no settings/staff), assistant (orders only).
+   Sections: Dashboard, Products, Categories, Orders, Reviews, Newsletter, Import, Staff, Settings. */
 import {
   isConfigured, onAuthState, signIn, signOut, resetPassword,
   fetchProducts, saveProduct, deleteProduct,
@@ -8,9 +9,11 @@ import {
   fetchOrders, updateOrderStatus, updateOrderStatusByOrderId,
   fetchAllReviews, deleteReview,
   fetchNewsletterNumbers,
+  fetchMyRole, fetchStaffList, saveStaff, removeStaff,
 } from './firebase.js';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
+/* admin-import.js (classic script) global: window.AuraImport */
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -35,6 +38,40 @@ let products = [];   /* Firestore products cache */
 let settings = null; /* Firestore settings cache */
 let orders = [];
 let editingId = null;
+let myRole = 'none'; /* owner | manager | assistant | none */
+
+/* Role → visible tabs (single login panel for everyone) */
+const ROLE_TABS = {
+  owner: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import', 'staff', 'settings'],
+  manager: ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import'],
+  assistant: ['orders'],
+};
+const ROLE_BN = { owner: 'মালিক', manager: 'ম্যানেজার', assistant: 'সহকারী', none: '—' };
+
+function applyRole(role) {
+  myRole = role;
+  const tabs = ROLE_TABS[role] || [];
+  $$('#tabs button[data-tab]').forEach((b) => {
+    b.hidden = !tabs.includes(b.dataset.tab);
+  });
+  $$('.tab-page').forEach((p) => {
+    const t = p.id.replace('tab-', '');
+    if (!tabs.includes(t)) p.hidden = true;
+  });
+  /* first visible tab becomes active */
+  const first = tabs[0];
+  $$('#tabs button[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === first));
+  $$('.tab-page').forEach((p) => { p.hidden = p.id !== 'tab-' + first; });
+  const badge = $('#roleBadge');
+  if (badge) badge.textContent = ROLE_BN[role] || role;
+}
+
+function can(perm) {
+  if (myRole === 'owner') return true;
+  if (myRole === 'manager') return ['products', 'orders', 'reviews', 'newsletter', 'import', 'categories'].includes(perm);
+  if (myRole === 'assistant') return perm === 'orders';
+  return false;
+}
 
 const STAGE_BN = { pending: 'পেন্ডিং', confirmed: 'কনফার্মড', shipped: 'শিপড', delivered: 'ডেলিভার্ড', cancelled: 'বাতিল' };
 const PAY_BN = { cod: 'ক্যাশ অন ডেলিভারি', bkash: 'বিকাশ', nagad: 'নগদ', card: 'কার্ড' };
@@ -62,11 +99,21 @@ function initAuth() {
   });
   $('#logoutBtn').addEventListener('click', async () => { await signOut(); });
 
-  onAuthState((user) => {
+  onAuthState(async (user) => {
     if (user) {
+      const rr = await fetchMyRole();
+      const role = rr.ok ? rr.role : 'none';
+      if (role === 'none') {
+        $('#loginScreen').hidden = false;
+        $('#panel').hidden = true;
+        $('#loginErr').textContent = 'এই অ্যাকাউন্টের admin/staff access নেই। মালিকের সাথে যোগাযোগ করুন।';
+        await signOut();
+        return;
+      }
       $('#loginScreen').hidden = true;
       $('#panel').hidden = false;
-      $('#adminEmail').textContent = user.email || '';
+      $('#adminEmail').textContent = (user.email || '') + ' (' + (ROLE_BN[role] || role) + ')';
+      applyRole(role);
       loadAll();
     } else {
       $('#panel').hidden = true;
@@ -92,9 +139,10 @@ function initTabs() {
 }
 
 async function loadAll() {
+  /* Role অনুযায়ী শুধু দরকারি data লোড (reviews/newsletter tab-এ ক্লিকে লোড হয়) */
   await loadProducts();
-  await loadSettings();
-  await loadOrders();
+  if (can('orders')) await loadOrders();
+  if (myRole === 'owner') { await loadSettings(); }
 }
 
 /* ================= DASHBOARD ================= */
@@ -454,10 +502,160 @@ async function saveSettingsForm() {
 }
 
 /* ================= INIT ================= */
+/* ================= STAFF ================= */
+const STAFF_ROLE_BN = { manager: 'ম্যানেজার', assistant: 'সহকারী' };
+
+async function loadStaff() {
+  const tb = $('#stTable tbody');
+  tb.innerHTML = '<tr><td colspan="4" class="muted">লোড হচ্ছে…</td></tr>';
+  const r = await fetchStaffList();
+  if (!r.ok) { tb.innerHTML = '<tr><td colspan="4" class="err">লোড ব্যর্থ।</td></tr>'; return; }
+  if (!r.staff.length) { tb.innerHTML = '<tr><td colspan="4" class="muted">কোনো স্টাফ নেই।</td></tr>'; return; }
+  tb.innerHTML = r.staff.map((s) => `<tr>
+    <td>${esc(s.email || '—')}</td><td class="mono small">${esc(s.uid)}</td>
+    <td>${esc(STAFF_ROLE_BN[s.role] || s.role || '—')}</td>
+    <td><button class="btn btn-outline btn-sm" data-delstaff="${esc(s.uid)}">মুছুন</button></td>
+  </tr>`).join('');
+  tb.querySelectorAll('[data-delstaff]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('এই স্টাফের access বাতিল করবেন?')) return;
+    const dr = await removeStaff(b.dataset.delstaff);
+    if (dr.ok) { toast('মুছে ফেলা হয়েছে।'); loadStaff(); }
+    else toast('ব্যর্থ: ' + (dr.error || ''));
+  }));
+}
+
+function initStaff() {
+  $('#stAdd').addEventListener('click', async () => {
+    const err = $('#stErr');
+    const email = $('#stEmail').value.trim(), uid = $('#stUid').value.trim(), role = $('#stRole').value;
+    err.textContent = '';
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'সঠিক ইমেইল দিন।'; return; }
+    if (!uid) { err.textContent = 'Firebase UID দিন।'; return; }
+    if (!['manager', 'assistant'].includes(role)) { err.textContent = 'Role বেছে নিন।'; return; }
+    const r = await saveStaff(uid, { email: email.toLowerCase(), role });
+    if (r.ok) {
+      toast('স্টাফ যোগ হয়েছে।');
+      $('#stEmail').value = ''; $('#stUid').value = '';
+      loadStaff();
+    } else err.textContent = 'ব্যর্থ: ' + (r.error || '');
+  });
+}
+
+/* ================= BULK IMPORT ================= */
+let impValidated = [];
+
+function impValidMains() {
+  const m = {};
+  (MAIN_CATEGORIES || []).forEach((c) => { m[c.slug] = (c.subs || []).map((s) => s.slug); });
+  return m;
+}
+
+function initImport() {
+  if (!window.AuraImport) { $('#impErr').textContent = 'Import engine লোড হয়নি।'; return; }
+  $('#impTemplate').addEventListener('click', () => window.AuraImport.downloadTemplate());
+  $('#impFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const err = $('#impErr');
+    err.textContent = '';
+    $('#impPreviewWrap').hidden = true;
+    $('#impResultWrap').hidden = true;
+    impValidated = [];
+    if (!file) return;
+    try {
+      const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+      const rows = isXlsx
+        ? await window.AuraImport.parseXLSXFile(file)
+        : await window.AuraImport.parseCSVFile(file);
+      if (!rows.length) { err.textContent = 'ফাইলে কোনো data পাওয়া যায়নি।'; return; }
+      const skuToId = new Map();
+      products.forEach((p) => { if (p.sku) skuToId.set(String(p.sku).trim().toLowerCase(), p.id); });
+      let maxSku = 100000;
+      products.forEach((p) => {
+        const mt = /^A(\d+)$/i.exec(String(p.sku || '').trim());
+        if (mt) maxSku = Math.max(maxSku, parseInt(mt[1], 10));
+      });
+      impValidated = window.AuraImport.validateRows(rows, {
+        skuToId, validMains: impValidMains(), nextSkuNum: maxSku + 1,
+      });
+      renderImpPreview();
+    } catch (ex) {
+      err.textContent = 'ফাইল পড়তে সমস্যা: ' + (ex.message || ex);
+    }
+  });
+  $('#impUpdateDup').addEventListener('change', renderImpPreview);
+  $('#impRun').addEventListener('click', runBulkImport);
+}
+
+function impStatusBadge(v) {
+  if (v.status === 'new') return '<span class="imp-badge ok">নতুন</span>';
+  if (v.status === 'duplicate') return '<span class="imp-badge warn">ডুপ্লিকেট</span>';
+  return '<span class="imp-badge bad">ভুল</span>';
+}
+
+function renderImpPreview() {
+  const wrap = $('#impPreviewWrap');
+  wrap.hidden = false;
+  const upd = $('#impUpdateDup').checked;
+  const counts = { new: 0, duplicate: 0, invalid: 0 };
+  impValidated.forEach((v) => { counts[v.status === 'duplicate' ? 'duplicate' : v.status]++; });
+  const willImport = counts.new + (upd ? counts.duplicate : 0);
+  $('#impSummary').innerHTML =
+    `<span class="imp-badge ok">${counts.new} নতুন</span> ` +
+    `<span class="imp-badge warn">${counts.duplicate} ডুপ্লিকেট${upd ? ' (আপডেট হবে)' : ' (বাদ যাবে)'}</span> ` +
+    `<span class="imp-badge bad">${counts.invalid} ভুল (বাদ যাবে)</span>`;
+  const tb = $('#impTable tbody');
+  tb.innerHTML = impValidated.map((v) => {
+    const notes = [...v.errors, ...v.warnings.map((w) => '⚠ ' + w)];
+    return `<tr>
+      <td>${v.rowNum}</td>
+      <td>${esc(v.data.nameBn || v.data.nameEn || '—')}</td>
+      <td class="mono small">${esc(v.data.sku || '(auto)')}</td>
+      <td>৳${Number(v.data.price || 0).toLocaleString('en-US')}</td>
+      <td>${impStatusBadge(v)}</td>
+      <td class="small">${notes.length ? esc(notes.join(' • ')) : '<span class="muted">ঠিক আছে</span>'}</td>
+    </tr>`;
+  }).join('');
+  $('#impRun').disabled = willImport === 0;
+  $('#impRun').textContent = willImport ? `ইমপোর্ট করুন (${willImport}টি)` : 'ইমপোর্ট করুন';
+}
+
+async function runBulkImport() {
+  const upd = $('#impUpdateDup').checked;
+  if (!confirm(`${impValidated.filter((v) => v.status === 'new' || (upd && v.status === 'duplicate')).length}টি প্রোডাক্ট ইমপোর্ট করবেন?`)) return;
+  const wrap = $('#impResultWrap'), prog = $('#impProgress'), bar = $('#impProgressBar');
+  wrap.hidden = false; prog.hidden = false;
+  $('#impRun').disabled = true;
+  let maxId = 0, maxSku = 100000;
+  products.forEach((p) => {
+    const mi = /^p(\d+)$/.exec(p.id || ''); if (mi) maxId = Math.max(maxId, parseInt(mi[1], 10));
+    const ms = /^A(\d+)$/i.exec(String(p.sku || '').trim()); if (ms) maxSku = Math.max(maxSku, parseInt(ms[1], 10));
+  });
+  const stats = await window.AuraImport.runImport(impValidated, {
+    updateDuplicates: upd,
+    saveFn: saveProduct,
+    idStart: maxId + 1, skuStart: maxSku + 1,
+    onProgress: (i, total) => { bar.style.width = Math.round((i / total) * 100) + '%'; },
+  });
+  prog.hidden = true;
+  const skipN = impValidated.filter((v) => v.status === 'invalid' || (v.status === 'duplicate' && !upd)).length;
+  $('#impResult').innerHTML =
+    `<span class="imp-badge ok">${stats.added} যোগ</span> ` +
+    `<span class="imp-badge warn">${stats.updated} আপডেট</span> ` +
+    `<span class="imp-badge">${skipN} বাদ</span> ` +
+    `<span class="imp-badge bad">${stats.failed} ব্যর্থ</span>` +
+    (stats.failures.length ? '<div class="small" style="margin-top:8px">' +
+      stats.failures.map((f) => `সারি ${f.rowNum}: ${esc(f.error)}`).join('<br>') + '</div>' : '');
+  toast('ইমপোর্ট শেষ।');
+  await loadProducts();
+  $('#impRun').disabled = false;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initTabs();
   initProducts();
+  initStaff();
+  initImport();
   $('#catSave').addEventListener('click', saveCategories);
   $('#orderSearch').addEventListener('input', renderOrders);
   $('#orderFilter').addEventListener('change', renderOrders);
@@ -467,5 +665,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const r = await saveSettings({ ...base, bkashLabel: 'personal', nagadLabel: 'personal' });
     if (r.ok) { toast('ডিফল্ট সেটিংস সেভ হয়েছে।'); await loadSettings(); }
     else toast('ব্যর্থ: ' + (r.error || ''));
+  });
+  /* Staff tab খুললে লিস্ট লোড */
+  $('#tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab="staff"]');
+    if (b && myRole === 'owner') loadStaff();
   });
 });

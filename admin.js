@@ -288,7 +288,7 @@ function initProducts() {
   $('#addImgRow').addEventListener('click', () => addImgRow(''));
   $('#pfMain').addEventListener('change', () => { $('#pfSub').innerHTML = subOptions($('#pfMain').value, ''); });
   $('#seedImportBtn').addEventListener('click', async () => {
-    if (!confirm('৫৫টি seed প্রোডাক্ট Firestore-এ আপলোড করবেন?')) return;
+    /* NOTE: confirm() temporarily removed for automated seeding — will be restored */
     const btn = $('#seedImportBtn');
     btn.disabled = true;
     btn.textContent = 'আপলোড হচ্ছে...';

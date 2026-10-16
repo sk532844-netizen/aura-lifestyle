@@ -273,6 +273,47 @@ export async function saveOrder(order) {
   } catch (e) { console.warn('[AURA] saveOrder failed:', e); return null; }
 }
 
+/* অর্ডার প্লেস হলে স্টক কমানো — size-wise, transaction-এ (race-safe)।
+   Combo line-item skip (size তথ্য নেই); stock field না থাকলে skip। */
+export async function decrementStock(items) {
+  const f = await fb();
+  if (!f) return false;
+  try {
+    await f.fFns.runTransaction(f.db, async (tx) => {
+      for (const it of items || []) {
+        if (!it || it.combo || it.comboId) continue;
+        const ref = f.fFns.doc(f.db, C.products, it.id);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) continue;
+        const p = snap.data();
+        const q = Math.max(1, Number(it.qty) || 1);
+        if (it.size && p.sizeStock && typeof p.sizeStock === 'object' && p.sizeStock[it.size] !== undefined) {
+          const cur = Number(p.sizeStock[it.size]) || 0;
+          tx.update(ref, { [`sizeStock.${it.size}`]: Math.max(0, cur - q) });
+        } else if (p.stock !== undefined && p.stock !== null) {
+          const cur = Number(p.stock) || 0;
+          tx.update(ref, { stock: Math.max(0, cur - q) });
+        }
+      }
+    });
+    return true;
+  } catch (e) { console.warn('[AURA] decrementStock failed:', e); return false; }
+}
+
+/* Live stock — products collection-এ change হলে callback(arr)।
+   Returns: unsubscribe function (Promise)। */
+export async function subscribeProducts(cb) {
+  const f = await fb();
+  if (!f) return () => {};
+  try {
+    return f.fFns.onSnapshot(f.fFns.collection(f.db, C.products), (snap) => {
+      const arr = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+      try { cb(arr); } catch (e) { console.warn('[AURA] subscribeProducts cb failed:', e); }
+    });
+  } catch (e) { console.warn('[AURA] subscribeProducts failed:', e); return () => {}; }
+}
+
 /* Guest tracking: public mirror থেকে শুধু status (customer data ছাড়া) */
 export async function fetchOrderStatus(orderId) {
   try {

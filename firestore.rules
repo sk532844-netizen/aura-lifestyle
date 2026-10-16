@@ -1,74 +1,135 @@
 rules_version = '2';
 
-/* AURA LIFESTYLE — Firestore Security Rules
-   ─────────────────────────────────────────
-   ADMIN_UIDS: নিচের লিস্টে আপনার Firebase Auth UID বসান
-   (ADMIN_SETUP.md ধাপ ৩ দেখুন — Firebase Console → Authentication →
-   Users → admin user-এর UID কপি করে এখানে বসান)।
-   একাধিক admin হলে কমা দিয়ে যোগ করুন: ['UID_1', 'UID_2'] */
+/* AURA LIFESTYLE — Firestore Security Rules (tab-based permissions)
+   ─────────────────────────────────────────────────────
+   - owner: hardcoded UID নিচে (সবকিছু)
+   - staff: Firestore `staff/{uid}` ডকুমেন্টে { tabs: [...], orderFull, suspended }
+     (Admin Panel → স্টাফ tab থেকে owner বানায়/এডিট করে)
+   - tabs না থাকলে legacy role fallback (manager/assistant)
+   - suspended: true হলে সব access বন্ধ
+   - Login panel একটাই — tabs অনুযায়ী tab দেখা যায় */
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function adminUids() {
-      return ['SNSSuBuLbgRSQy4moDwz6rWnYmv1'];
+    function ownerUid() {
+      return 'SNSSuBuLbgRSQy4moDwz6rWnYmv1';
     }
-    function isAdmin() {
-      return request.auth != null && request.auth.uid in adminUids();
+    function isOwner() {
+      return request.auth != null && request.auth.uid == ownerUid();
     }
-    function isOwner(userId) {
+    /* staff/{uid} ডকুমেন্ট (Firestore rules-এ if চলে না — ternary ব্যবহার) */
+    function sd() {
+      return request.auth == null ? null
+        : exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+          ? get(/databases/$(database)/documents/staff/$(request.auth.uid)).data
+          : null;
+    }
+    function isSuspended() {
+      return sd() != null && sd().get('suspended', false) == true;
+    }
+    /* tabs array; পুরনো role-only ডকুমেন্টে preset fallback */
+    function myTabs() {
+      return request.auth == null || isSuspended() ? []
+        : request.auth.uid == ownerUid() ? ['*']
+        : sd() == null ? []
+        : sd().get('tabs', null) != null ? sd().get('tabs', [])
+        : sd().get('role', 'none') == 'manager'
+          ? ['dashboard', 'products', 'categories', 'orders', 'reviews', 'combos', 'newsletter', 'import']
+        : sd().get('role', 'none') == 'assistant' ? ['orders']
+        : [];
+    }
+    function hasTab(t) { return '*' in myTabs() || t in myTabs(); }
+    /* অর্ডার ফুল কন্ট্রোল (stage-এর বাইরে edit) */
+    function orderFull() {
+      return request.auth != null && !isSuspended() && (
+        request.auth.uid == ownerUid() ? true
+        : sd() == null ? false
+        : sd().get('orderFull', null) != null ? sd().get('orderFull', false) == true
+        : sd().get('role', 'none') == 'manager');
+    }
+    function onlyKeys(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+    /* গ্রাহক অর্ডার করলে শুধু স্টক সংখ্যা কমাতে পারবে —
+       দাম/নাম/ছবি/অন্য field বদলানো যাবে না; scalar `stock` বাড়ানো যাবে না */
+    function publicStockDecrement() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['sizeStock', 'stock'])
+          && (!changed.hasAny(['stock']) || request.resource.data.stock <= resource.data.get('stock', 0));
+    }
+    function isOwnerUid(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    /* Products: সবাই পড়তে পারে, শুধু admin লিখতে পারে */
-    match /products/{id} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+    /* Staff: staff-tab আছে এমন owner/staff দেখে/লেখে; staff নিজেরটা পড়তে পারে */
+    match /staff/{uid} {
+      allow get: if hasTab('staff') || (request.auth != null && request.auth.uid == uid);
+      allow list, create, update, delete: if hasTab('staff');
     }
 
-    /* Settings (payment numbers, delivery fees...): সবাই পড়ে, admin লেখে */
+    /* Products: সবাই পড়তে পারে; লেখে products-tab */
+    match /products/{id} {
+      allow read: if true;
+      allow create, update, delete: if hasTab('products');
+      /* অর্ডার প্লেসে গ্রাহক শুধু স্টক কমাবে (app.js → decrementStock) */
+      allow update: if publicStockDecrement();
+    }
+
+    /* Settings: সবাই পড়ে।
+       - settings-tab: সব লেখা
+       - categories-tab: শুধু hiddenCategories/catImgs (+updatedAt) বদলাতে পারে */
     match /settings/{id} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create: if hasTab('settings');
+      allow update: if hasTab('settings')
+        || (hasTab('categories') && onlyKeys(['hiddenCategories', 'catImgs', 'updatedAt']));
+      allow delete: if hasTab('settings');
     }
 
     /* Orders: যে কেউ তৈরি করতে পারে (guest checkout);
-       পড়তে/বদলাতে পারে শুধু admin, অথবা লগইন করা অর্ডারের মালিক */
+       দেখে orders-tab বা লগইন করা অর্ডারের মালিক;
+       update: orderFull সব, নইলে শুধু stage/updatedAt */
     match /orders/{id} {
       allow create: if true;
-      allow get: if isAdmin() || (request.auth != null && resource.data.uid == request.auth.uid);
-      allow list: if isAdmin();
-      allow update: if isAdmin();
+      allow get: if hasTab('orders') || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow list: if hasTab('orders');
+      allow update: if orderFull() || (hasTab('orders') && onlyKeys(['stage', 'paid', 'updatedAt']));
       allow delete: if false;
     }
 
-    /* Public order-status mirror: guest tracking (orderId দিয়ে status দেখা)।
-       Customer data নেই — শুধু orderId + status। Create: guest checkout,
-       update: admin — তাই guest-রা নিজের অর্ডারের status দেখতে পারে। */
+    /* Public order-status mirror: guest tracking।
+       update: order update করতে পারে এমন staff */
     match /orderStatus/{id} {
       allow read: if true;
       allow create: if true;
-      allow update: if isAdmin();
+      allow update: if orderFull() || (hasTab('orders') && onlyKeys(['orderId', 'stage', 'paid', 'updatedAt']));
       allow delete: if false;
     }
 
-    /* Newsletter (WhatsApp numbers): যে কেউ দিতে পারে, দেখে শুধু admin */
+    /* Newsletter (WhatsApp numbers): যে কেউ দিতে পারে, দেখে newsletter-tab */
     match /newsletterNumbers/{id} {
       allow create: if true;
-      allow read: if isAdmin();
+      allow read: if hasTab('newsletter');
       allow update, delete: if false;
     }
 
-    /* Reviews: সবাই পড়তে/লিখতে পারে, ডিলিট শুধু admin (spam নিয়ন্ত্রণ) */
+    /* Reviews: সবাই পড়তে/লিখতে পারে, ডিলিট reviews-tab (spam নিয়ন্ত্রণ) */
     match /reviews/{id} {
       allow read, create: if true;
       allow update: if false;
-      allow delete: if isAdmin();
+      allow delete: if hasTab('reviews');
+    }
+
+    /* Combos: সবাই পড়তে পারে (visible filter client-side), লেখে combos-tab */
+    match /combos/{id} {
+      allow read: if true;
+      allow create, update, delete: if hasTab('combos');
     }
 
     /* Customer profiles: নিজেরটা নিজে */
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      allow read, write: if isOwnerUid(uid);
     }
   }
 }

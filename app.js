@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock } from './firebase.js?v=20261018d';
-import * as fb from './firebase.js?v=20261018d'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock, subscribeProducts, decrementStock } from './firebase.js?v=20261016e';
+import * as fb from './firebase.js?v=20261016e'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -94,6 +94,7 @@ const I18N = {
   inStock: { bn: 'স্টকে আছে', en: 'In Stock' },
   lowStock: { bn: 'মাত্র {n}টি বাকি', en: 'Only {n} left' },
   outStock: { bn: 'স্টক শেষ', en: 'Out of Stock' },
+  sizeNA: { bn: 'সাইজ এভেলেবেল নেই', en: 'Size not available' },
   freeShip: { bn: 'ফ্রি ডেলিভারি', en: 'Free Delivery' },
   waOrder: { bn: 'WhatsApp-এ অর্ডার', en: 'Order on WhatsApp' },
   maxPrice: { bn: 'সর্বোচ্চ দাম', en: 'Max price' },
@@ -369,6 +370,8 @@ async function init() {
   window.addEventListener('hashchange', route);
   route();
   startFlashTimer();
+  /* Live stock — অন্য কেউ অর্ডার করলে সবার screen-এ size/badge update */
+  subscribeProducts((arr) => { PRODUCTS = arr; refreshStockUI(); });
   const si = $('#searchInput');
   si.addEventListener('input', onSearchInput);
   si.addEventListener('keydown', (e) => { if (e.key === 'Enter') { location.hash = '#shop?q=' + encodeURIComponent(si.value.trim()); $('#suggestBox').classList.remove('open'); } });
@@ -480,6 +483,7 @@ function route() {
   closeDrawer();
   loadHomeTestimonials();
   renderOffersCombos();
+  renderHomeCombos();
   if (pathChanged) window.scrollTo(0, 0);
   else if (path === 'shop') { const g = $('#shopGrid'); if (g) g.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 }
@@ -503,10 +507,9 @@ function prodCard(p) {
   const name = LANG === 'bn' ? p.nameBn : p.nameEn;
   const wished = wish.includes(p.id);
   const oos = isOutOfStock(p);
-  const ts = totalStock(p);
-  const stockCls = oos ? 'low' : (ts <= 5 ? 'low' : 'ok');
-  const stockTxt = oos ? t('outStock') : (ts <= 5 ? t('lowStock', { n: ts }) : t('inStock'));
-  return `<article class="prod-card">
+  const stockCls = oos ? 'low' : 'ok';
+  const stockTxt = oos ? t('outStock') : t('inStock');
+  return `<article class="prod-card" data-pid="${esc(p.id)}">
     <div class="p-img"><a href="#product/${esc(p.id)}"><img src="${esc(p.img)}" alt="${esc(name)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy"></a>
     ${off > 0 ? `<span class="badge-off">-${off}%</span>` : ''}
     <button class="wish-btn ${wished ? 'on' : ''}" data-wish="${esc(p.id)}" aria-label="wishlist">${wished ? '♥' : '♡'}</button></div>
@@ -553,6 +556,7 @@ function viewHome() {
   }).join('')}</div></section>
 
   ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:14px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
+  <div id="homeCombos"></div>
 
   <section class="section"><div class="section-head"><h2>${t('best')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${best.map(prodCard).join('')}</div></section>
 
@@ -589,31 +593,47 @@ function viewOffers() {
     : `<div class="empty"><p>${t('noOffers')}</p></div>`}
   </section>`;
 }
+function comboCard(c) {
+  const items = (c.items || []).map((i) => { const p = prodById(i.id); return p ? esc(LANG === 'bn' ? p.nameBn : p.nameEn) + (i.qty > 1 ? ' ×' + i.qty : '') : ''; }).filter(Boolean);
+  const off = c.oldPrice > c.price ? Math.round((1 - c.price / c.oldPrice) * 100) : 0;
+  const nm = esc(LANG === 'bn' ? c.nameBn : c.nameEn);
+  return `<article class="p-card"><div class="p-img"><img src="${esc(c.img || '')}" alt="${nm}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy">${off ? `<span class="p-off">-${off}%</span>` : ''}</div>
+  <div class="p-body"><div class="p-cat">🎁 ${t('comboT')}${c.freeDel ? ` • 🚚 ${t('freeDel')}` : ''}</div><h3 class="p-name">${nm}</h3>
+  <div class="p-sub" style="font-size:12px; color:var(--muted)">${t('comboIncludes')} ${esc(items.join(', '))}</div>
+  <div class="price"><b>${fmt(c.price)}</b>${c.oldPrice > c.price ? `<s>${fmt(c.oldPrice)}</s>` : ''}</div>
+  <button class="add-btn" data-combo="${esc(c.id)}">${t('addCart')}</button></div></article>`;
+}
+function bindComboBtns(root) {
+  (root || document).querySelectorAll('[data-combo]').forEach((b) => {
+    if (b.dataset.bound) return; b.dataset.bound = '1';
+    b.addEventListener('click', () => addComboToCart(b.dataset.combo));
+  });
+}
 async function renderOffersCombos() {
   const box = $('#offersCombos');
   if (!box) return;
   const combos = await loadCombos();
   if (!combos.length) return;
-  box.innerHTML = `<h3 style="margin:0 0 12px">${t('comboT')}</h3><div class="prod-grid">${combos.map((c) => {
-    const items = (c.items || []).map((i) => { const p = prodById(i.id); return p ? esc(LANG === 'bn' ? p.nameBn : p.nameEn) + (i.qty > 1 ? ' ×' + i.qty : '') : ''; }).filter(Boolean);
-    const off = c.oldPrice > c.price ? Math.round((1 - c.price / c.oldPrice) * 100) : 0;
-    return `<article class="p-card"><div class="p-img"><img src="${esc(c.img || '')}" alt="${esc(LANG === 'bn' ? c.nameBn : c.nameEn)}" onerror="this.src='${FALLBACK_IMG}'" loading="lazy">${off ? `<span class="p-off">-${off}%</span>` : ''}</div>
-    <div class="p-body"><div class="p-cat">🎁 ${t('comboT')}</div><h3 class="p-name">${esc(LANG === 'bn' ? c.nameBn : c.nameEn)}</h3>
-    <div class="p-sub" style="font-size:12px; color:var(--muted)">${t('comboIncludes')} ${esc(items.join(', '))}</div>
-    <div class="price"><b>${fmt(c.price)}</b>${c.oldPrice > c.price ? `<s>${fmt(c.oldPrice)}</s>` : ''}</div>
-    <button class="add-btn" data-combo="${esc(c.id)}">${t('addCart')}</button></div></article>`;
-  }).join('')}</div>`;
-  $$('#offersCombos [data-combo]').forEach((b) => b.addEventListener('click', () => addComboToCart(b.dataset.combo)));
+  box.innerHTML = `<h3 style="margin:0 0 12px">${t('comboT')}</h3><div class="prod-grid">${combos.map(comboCard).join('')}</div>`;
+  bindComboBtns(box);
+}
+async function renderHomeCombos() {
+  const box = $('#homeCombos');
+  if (!box) return;
+  const combos = await loadCombos();
+  if (!combos.length) return;
+  box.innerHTML = `<section class="section"><div class="section-head"><h2>🎁 ${t('comboT')}</h2><a href="#offers">${t('viewAll')} →</a></div><div class="prod-row">${combos.map(comboCard).join('')}</div></section>`;
+  bindComboBtns(box);
 }
 function addComboToCart(id) {
   const c = (CACHED_COMBOS || []).find((x) => x.id === id);
-  if (!c || !c.items) return;
-  c.items.forEach((i) => {
-    const p = prodById(i.id);
-    if (!p || isOutOfStock(p)) return;
-    const ex = cart.find((x) => x.id === i.id && !x.size);
-    if (ex) ex.qty += (i.qty || 1);
-    else cart.push({ id: i.id, qty: i.qty || 1 });
+  if (!c) return;
+  const cid = 'combo_' + c.id;
+  const ex = cart.find((x) => x.id === cid);
+  if (ex) ex.qty += 1;
+  else cart.push({
+    id: cid, size: '', qty: 1,
+    combo: { id: c.id, nameBn: c.nameBn, nameEn: c.nameEn, img: c.img || '', price: Number(c.price) || 0, freeDel: !!c.freeDel },
   });
   saveLS('aura_cart', cart);
   updateBadges();
@@ -699,15 +719,16 @@ function viewProduct(id) {
       <p class="desc">${esc(desc)}</p>
       ${(() => {
         const oos = isOutOfStock(p);
-        const ts = totalStock(p);
-        const stockHtml = `<div class="stock ${oos ? 'low' : 'ok'}">${oos ? t('outStock') : (ts <= 5 ? t('lowStock', { n: ts }) : t('inStock'))}</div>`;
-        const sizeHtml = (p.sizes || []).length
+        const stockHtml = `<div class="stock ${oos ? 'low' : 'ok'}" id="pdStock">${oos ? t('outStock') : t('inStock')}</div>`;
+        const sizes = p.sizes || [];
+        const naSizes = sizes.filter((s) => sizeQty(p, s) <= 0);
+        const sizeHtml = sizes.length
           ? `<div style="margin-top:14px"><b>${t('sizeSel')}</b></div>
-      <div class="size-row" id="sizeRow">${p.sizes.map((s) => {
-            const q = sizeQty(p, s);
-            const dis = q <= 0;
-            return `<button class="size-btn${dis ? ' sold-out' : ''}" data-size="${esc(s)}" ${dis ? 'disabled' : ''}>${esc(s)}${dis ? ' ✕' : ''}</button>`;
+      <div class="size-row" id="sizeRow">${sizes.map((s) => {
+            const dis = sizeQty(p, s) <= 0;
+            return `<button class="size-btn${dis ? ' sold-out' : ''}" data-size="${esc(s)}" ${dis ? 'disabled' : ''}>${esc(s)}</button>`;
           }).join('')}</div>
+      ${naSizes.length ? `<div class="muted" id="sizeNA" style="font-size:13px; margin-top:6px">${esc(naSizes.join(', '))} — ${t('sizeNA')}</div>` : ''}
       <div class="err" id="sizeErr"></div>`
           : '';
         const btns = oos
@@ -731,8 +752,44 @@ function viewProduct(id) {
   </section>`;
 }
 
+/* ================= LIVE STOCK UI ================= */
+/* পুরো page re-render না করে শুধু stock badge + size button update */
+function refreshStockUI() {
+  document.querySelectorAll('[data-pid]').forEach((card) => {
+    const p = prodById(card.dataset.pid);
+    if (!p) return;
+    const oos = isOutOfStock(p);
+    const badge = card.querySelector('.stock');
+    if (badge) { badge.className = 'stock ' + (oos ? 'low' : 'ok'); badge.textContent = oos ? t('outStock') : t('inStock'); }
+    const btn = card.querySelector('[data-add]');
+    if (btn) { btn.disabled = oos; btn.style.opacity = oos ? '.5' : ''; }
+  });
+  const m = location.hash.match(/^#product\/([^/?]+)/);
+  const row = document.getElementById('sizeRow');
+  if (m && row) {
+    const p = prodById(decodeURIComponent(m[1]));
+    if (!p) return;
+    const sizes = p.sizes || [];
+    row.querySelectorAll('.size-btn').forEach((b) => {
+      const dis = sizeQty(p, b.dataset.size) <= 0;
+      b.classList.toggle('sold-out', dis);
+      b.disabled = dis;
+      if (dis) b.classList.remove('on');
+    });
+    const naSizes = sizes.filter((s) => sizeQty(p, s) <= 0);
+    let naEl = document.getElementById('sizeNA');
+    if (naSizes.length) {
+      const html = esc(naSizes.join(', ')) + ' — ' + t('sizeNA');
+      if (naEl) naEl.innerHTML = html;
+      else { naEl = document.createElement('div'); naEl.id = 'sizeNA'; naEl.className = 'muted'; naEl.style.cssText = 'font-size:13px; margin-top:6px'; naEl.innerHTML = html; row.after(naEl); }
+    } else if (naEl) naEl.remove();
+    const badge = document.getElementById('pdStock');
+    if (badge) { const oos = isOutOfStock(p); badge.className = 'stock ' + (oos ? 'low' : 'ok'); badge.textContent = oos ? t('outStock') : t('inStock'); }
+  }
+}
+
 /* ================= CART ================= */
-function cartTotal() { return cart.reduce((s, i) => s + (prodById(i.id)?.price || 0) * i.qty, 0); }
+function cartTotal() { return cart.reduce((s, i) => s + ((i.combo ? i.combo.price : prodById(i.id)?.price) || 0) * i.qty, 0); }
 function cartCount() { return cart.reduce((s, i) => s + i.qty, 0); }
 
 function addToCart(id, qty, size) {
@@ -774,7 +831,12 @@ function viewCart() {
   return `<section class="section"><h2 style="color:var(--navy)">${t('cartT')}</h2>
   <div class="cart-layout" style="margin-top:16px"><div class="card">
   ${!cart.length ? `<div class="empty"><h3>${t('cartEmpty')}</h3><p>${t('cartEmptyP')}</p><a class="btn" href="#shop" style="margin-top:12px">${t('shopCta')}</a></div>` :
-    cart.map((i) => { const p = prodById(i.id); if (!p) return ''; return `<div class="cart-item"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><div class="ci-info"><b>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}</b><span>${i.size ? t('sizeLbl') + esc(i.size) + ' • ' : ''}${fmt(p.price)}</span><button class="ci-remove" onclick="removeItem('${esc(i.id)}','${esc(i.size)}')">${t('remove')}</button></div><div class="ci-qty"><button onclick="setQty('${esc(i.id)}','${esc(i.size)}',-1)">−</button><b>${i.qty}</b><button onclick="setQty('${esc(i.id)}','${esc(i.size)}',1)">+</button></div><b>${fmt(p.price * i.qty)}</b></div>`; }).join('')}
+    cart.map((i) => {
+      if (i.combo) {
+        const c = i.combo, nm = esc(LANG === 'bn' ? c.nameBn : c.nameEn);
+        return `<div class="cart-item"><img src="${esc(c.img || '')}" onerror="this.src='${FALLBACK_IMG}'" alt=""><div class="ci-info"><b>🎁 ${nm}</b><span>${c.freeDel ? '🚚 ' + t('freeDel') + ' • ' : ''}${fmt(c.price)}</span><button class="ci-remove" onclick="removeItem('${esc(i.id)}','')">${t('remove')}</button></div><div class="ci-qty"><button onclick="setQty('${esc(i.id)}','',-1)">−</button><b>${i.qty}</b><button onclick="setQty('${esc(i.id)}','',1)">+</button></div><b>${fmt(c.price * i.qty)}</b></div>`;
+      }
+      const p = prodById(i.id); if (!p) return ''; return `<div class="cart-item"><img src="${esc(p.img)}" onerror="this.src='${FALLBACK_IMG}'" alt=""><div class="ci-info"><b>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)}</b><span>${i.size ? t('sizeLbl') + esc(i.size) + ' • ' : ''}${fmt(p.price)}</span><button class="ci-remove" onclick="removeItem('${esc(i.id)}','${esc(i.size)}')">${t('remove')}</button></div><div class="ci-qty"><button onclick="setQty('${esc(i.id)}','${esc(i.size)}',-1)">−</button><b>${i.qty}</b><button onclick="setQty('${esc(i.id)}','${esc(i.size)}',1)">+</button></div><b>${fmt(p.price * i.qty)}</b></div>`; }).join('')}
   </div><div class="card">
     <h3>${t('orderSummary')}</h3>
     ${total >= freeAbove ? `<p style="color:var(--green); font-weight:700; margin:10px 0">${t('freeShipWon')}</p>` : `<p style="font-size:13px; color:var(--muted); margin:10px 0">${t('freeShipMore', { x: fmt(freeAbove - total) })}</p><div class="ship-progress"><i style="width:${pct}%"></i></div>`}
@@ -894,7 +956,7 @@ async function placeOrder(e) {
   btn.innerHTML = t('ordering');
   try {
     const sub = cartTotal();
-    const del = deliveryCharge(district, sub);
+    const del = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(district, sub);
     const total = sub + del;
     const orderId = 'AL-' + Math.floor(100000 + Math.random() * 900000);
     const sessUser = loadLS('aura_user', null);
@@ -903,12 +965,15 @@ async function placeOrder(e) {
       trxId, senderNumber,
       uid: (sessUser && (sessUser.uid || sessUser.email)) || '',
       userEmail: (sessUser && sessUser.email) || email || '',
-      items: cart.map((i) => ({ id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id })),
+      items: cart.map((i) => i.combo
+        ? { id: i.id, comboId: i.combo.id, qty: i.qty, size: '', price: i.combo.price, freeDel: !!i.combo.freeDel, name: i.combo.nameEn || i.combo.nameBn || i.id }
+        : { id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id }),
       subtotal: sub, delivery: del, total, stage: 'pending', paid: false, courier: '', trackingNumber: '', dispatchDate: '',
       createdAt: new Date().toISOString(),
     };
     const remoteId = await saveOrder(order);
     if (!remoteId) { localOrders.push(order); saveLS('aura_orders_local', localOrders); }
+    else { try { await decrementStock(order.items); } catch (e) { console.warn('[AURA] stock decrement skipped:', e); } }
     cart = [];
     saveLS('aura_cart', cart);
     updateBadges();
@@ -1225,7 +1290,7 @@ bindDynamic = function () {
       const sub = cartTotal();
       const dt = $('#coDelTime');
       if (dt) dt.textContent = !dv ? '' : (dv.startsWith('ঢাকা (সিটি)') ? t('delTimeIn') : t('delTimeOut'));
-      const d = deliveryCharge(dv, sub);
+      const d = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(dv, sub);
       if (d === null) { $('#coDel').textContent = t('fDistrictPh'); $('#coTotal').textContent = fmt(sub); $('#coTotalBtn').textContent = fmt(sub); }
       else if (d === 0) { $('#coDel').innerHTML = `<span style="color:var(--green);font-weight:700">${t('freeDel')}</span>`; $('#coTotal').textContent = fmt(sub); $('#coTotalBtn').textContent = fmt(sub); }
       else { $('#coDel').textContent = fmt(d); $('#coTotal').textContent = fmt(sub + d); $('#coTotalBtn').textContent = fmt(sub + d); }

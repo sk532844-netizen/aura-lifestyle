@@ -13,7 +13,7 @@ import {
   fetchMyRole, fetchStaffList, saveStaff, removeStaff,
   createStaffAccount, uploadProductImage, deleteProductImage,
   sizeQty, totalStock, tabsForRole, orderFullForRole, OWNER_UID,
-} from './firebase.js?v=20261018d';
+} from './firebase.js?v=20261016e';
 
 /* data.js (classic script) globals: MAIN_CATEGORIES, SEED_PRODUCTS, DEFAULT_SETTINGS */
 /* admin-import.js (classic script) global: window.AuraImport */
@@ -693,7 +693,7 @@ function resetComboForm() {
   editingComboId = null; comboImgUrl = ''; comboItems = {};
   $('#comboFormTitle').textContent = 'নতুন কম্বো অফার';
   $('#cbNameBn').value = ''; $('#cbNameEn').value = ''; $('#cbPrice').value = ''; $('#cbOldPrice').value = '';
-  $('#cbVisible').checked = true; $('#cbImgPrev').style.display = 'none';
+  $('#cbVisible').checked = true; $('#cbFreeDel').checked = false; $('#cbImgPrev').style.display = 'none';
   $('#cbCancel').hidden = true;
   renderComboProdList();
 }
@@ -704,7 +704,7 @@ async function loadCombos() {
     const names = (c.items || []).map((i) => { const p = products.find((x) => x.id === i.id); return (p ? (p.nameBn || p.nameEn) : i.id) + (i.qty > 1 ? ' ×' + i.qty : ''); }).join(', ');
     return `<div class="order-card"><div class="order-head">
       <img src="${esc(c.img || '')}" style="width:52px; height:36px; object-fit:cover; border-radius:6px" onerror="this.style.visibility='hidden'">
-      <b style="flex:1">${esc(c.nameBn || c.nameEn)}</b><span>${fmt(c.price)}</span>
+      <b style="flex:1">${esc(c.nameBn || c.nameEn)}</b>${c.freeDel ? '<span title="ডেলিভারি ফ্রি">🚚</span>' : ''}<span>${fmt(c.price)}</span>
       <button class="pill ${c.visible !== false ? 'ok' : 'no'}" data-cbvis="${esc(c.id)}">${c.visible !== false ? 'চালু' : 'বন্ধ'}</button>
       <button class="btn btn-outline btn-sm" data-cbedit="${esc(c.id)}">এডিট</button>
       <button class="btn btn-outline btn-sm" data-cbdel="${esc(c.id)}">ডিলিট</button></div>
@@ -730,7 +730,7 @@ async function loadCombos() {
     $('#comboFormTitle').textContent = 'কম্বো এডিট করুন';
     $('#cbNameBn').value = c.nameBn || ''; $('#cbNameEn').value = c.nameEn || '';
     $('#cbPrice').value = c.price || ''; $('#cbOldPrice').value = c.oldPrice || '';
-    $('#cbVisible').checked = c.visible !== false;
+    $('#cbVisible').checked = c.visible !== false; $('#cbFreeDel').checked = !!c.freeDel;
     if (comboImgUrl) { $('#cbImgPrev').src = comboImgUrl; $('#cbImgPrev').style.display = ''; }
     $('#cbCancel').hidden = false;
     renderComboProdList();
@@ -763,7 +763,7 @@ function initCombos() {
     if (!items.length) { toast('অন্তত ১টি প্রোডাক্ট বাছুন।'); return; }
     const data = {
       nameBn, nameEn, price, oldPrice: +$('#cbOldPrice').value || 0,
-      img: comboImgUrl, items, visible: $('#cbVisible').checked,
+      img: comboImgUrl, items, visible: $('#cbVisible').checked, freeDel: $('#cbFreeDel').checked,
     };
     if (editingComboId) data.id = editingComboId;
     const r = await saveCombo(data);

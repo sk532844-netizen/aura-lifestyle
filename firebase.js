@@ -408,6 +408,66 @@ export async function updateOrderStatusByOrderId(orderId, stage) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
+/* Customer: নিজের অর্ডারে cancel request (pending/confirmed stage-এ)।
+   Rules: owner নিজের order update করতে পারে। Stock restore হয় না এখানে —
+   সেটা staff confirm করলে confirmOrderCancel-এ হবে। */
+export async function requestOrderCancel(docId) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.updateDoc(f.fFns.doc(f.db, C.orders, docId), {
+      cancelRequested: true, cancelRequestedAt: f.fFns.serverTimestamp(),
+      updatedAt: f.fFns.serverTimestamp(),
+    });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* Staff: cancel confirm + stock auto-restore (transaction, idempotent)।
+   Combo line-item skip (stock কমেনি); stockRestored flag → double-restore রোধ।
+   Mirror (orderStatus) আপডেটও এখানেই হয়। */
+export async function confirmOrderCancel(docId) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const orderRef = f.fFns.doc(f.db, C.orders, docId);
+    const result = await f.fFns.runTransaction(f.db, async (tx) => {
+      const snap = await tx.get(orderRef);
+      if (!snap.exists()) return { ok: false, error: 'not-found' };
+      const o = snap.data();
+      if ((o.stage || 'pending') === 'cancelled') return { ok: true, already: true, orderId: o.orderId };
+      let restored = false;
+      if (!o.stockRestored) {
+        for (const it of o.items || []) {
+          if (!it || it.combo || it.comboId) continue;
+          const ref = f.fFns.doc(f.db, C.products, it.id);
+          const psnap = await tx.get(ref);
+          if (!psnap.exists()) continue;
+          const p = psnap.data();
+          const q = Math.max(1, Number(it.qty) || 1);
+          if (it.size && p.sizeStock && typeof p.sizeStock === 'object' && p.sizeStock[it.size] !== undefined) {
+            const cur = Number(p.sizeStock[it.size]) || 0;
+            tx.update(ref, { [`sizeStock.${it.size}`]: cur + q });
+          } else if (p.stock !== undefined && p.stock !== null) {
+            const cur = Number(p.stock) || 0;
+            tx.update(ref, { stock: cur + q });
+          }
+        }
+        restored = true;
+      }
+      tx.update(orderRef, {
+        stage: 'cancelled', stockRestored: true,
+        cancelRequested: false, updatedAt: f.fFns.serverTimestamp(),
+      });
+      return { ok: true, restored, orderId: o.orderId };
+    });
+    if (result.ok && result.orderId) {
+      try { await updateOrderStatusByOrderId(result.orderId, 'cancelled'); } catch (e) { console.warn('[AURA] cancel mirror failed:', e); }
+    }
+    return result;
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
 /* লগইন করা কাস্টমারের নিজের অর্ডার (composite index এড়াতে client-side sort) */
 export async function fetchUserOrders(uid) {
   const f = await fb();

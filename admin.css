@@ -191,3 +191,7 @@ label.check input { width: auto; }
   .order-card.compact .compact-head { flex-wrap: wrap; gap: 6px; }
   .oc-cust { flex-basis: 100%; }
 }
+
+/* ---------- 2026-10-18: cancel request badge ---------- */
+.pill.warn { background: #fef3e2; color: #b45309; }
+.cancel-req-badge { display: inline-block; background: #fdecea; color: #b91c1c; border: 1px solid #f5c2c2; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-left: 8px; }

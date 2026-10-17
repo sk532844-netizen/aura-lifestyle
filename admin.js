@@ -7,6 +7,7 @@ import {
   fetchProducts, saveProduct, deleteProduct,
   fetchSettings, saveSettings,
   fetchOrders, updateOrderStatus, updateOrderStatusByOrderId, setOrderPaid, setOrderPaidByOrderId,
+  requestOrderCancel, confirmOrderCancel,
   fetchAllReviews, deleteReview, submitReview, fetchHomepageReviews,
   fetchAllCombos, saveCombo, deleteCombo,
   fetchNewsletterNumbers,
@@ -564,6 +565,7 @@ function orderCard(o) {
     <div class="order-head compact-head">
       <button class="expand-btn" data-expand="${esc(o.id)}" aria-label="বিস্তারিত">▸</button>
       <b>${esc(o.orderId || o.id)}</b>
+      ${o.cancelRequested ? '<span class="cancel-req-badge">🚫 ক্যান্সেল রিকোয়েস্ট</span>' : ''}
       <span class="oc-cust">${esc(o.name || '')}</span>
       <span class="oc-total">${fmt(o.total)}</span>
       <select class="status-select st-${esc(o.stage || 'pending')}" data-stage="${esc(o.id)}">
@@ -594,7 +596,24 @@ function bindOrderCards(root) {
     b.setAttribute('aria-expanded', open ? 'true' : 'false');
   }));
   $$('[data-stage]', root).forEach((sel) => sel.addEventListener('change', async () => {
-    const r = await updateOrderStatus(sel.dataset.stage, sel.value);
+    const newStage = sel.value;
+    const docId = sel.dataset.stage;
+    /* বাতিল → stock auto-restore সহ cancel flow */
+    if (newStage === 'cancelled') {
+      if (!confirm('এই অর্ডার বাতিল করবেন? স্টক auto-ফেরত আসবে।')) { sel.value = (orders.find((x) => x.id === docId) || {}).stage || 'pending'; return; }
+      sel.disabled = true;
+      const r = await confirmOrderCancel(docId);
+      sel.disabled = false;
+      if (r.ok) {
+        const o = orders.find((x) => x.id === docId);
+        if (o) { o.stage = 'cancelled'; o.cancelRequested = false; }
+        sel.className = 'status-select st-cancelled';
+        toast(r.already ? 'অর্ডার আগেই বাতিল ছিল।' : 'অর্ডার বাতিল হয়েছে, স্টক ফেরত এসেছে।');
+        renderOrders(); renderDashboard();
+      } else { toast('বাতিল ব্যর্থ: ' + (r.error || '')); sel.value = (orders.find((x) => x.id === docId) || {}).stage || 'pending'; }
+      return;
+    }
+    const r = await updateOrderStatus(docId, newStage);
     if (r.ok) {
       const o = orders.find((x) => x.id === sel.dataset.stage);
       if (o) {

@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock, subscribeProducts, decrementStock } from './firebase.js?v=20261017b';
-import * as fb from './firebase.js?v=20261017b'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock, subscribeProducts, decrementStock } from './firebase.js?v=20261018';
+import * as fb from './firebase.js?v=20261018'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -384,6 +384,12 @@ const I18N = {
   siLogout: { bn: 'লগ আউট', en: 'Log Out' },
   siMyOrders: { bn: 'আমার অর্ডার', en: 'My Orders' },
   siNoOrders: { bn: 'এখনো কোনো অর্ডার নেই।', en: 'No orders yet.' },
+  cancelOrder: { bn: 'অর্ডার বাতিল করুন', en: 'Cancel order' },
+  cancelReqSent: { bn: 'বাতিলের অনুরোধ পাঠানো হয়েছে', en: 'Cancellation requested' },
+  cancelConfirm: { bn: 'এই অর্ডার বাতিলের অনুরোধ পাঠাবেন?', en: 'Request cancellation of this order?' },
+  cancelReqOk: { bn: 'বাতিলের অনুরোধ পাঠানো হয়েছে।', en: 'Cancellation requested.' },
+  cancelFail: { bn: 'ব্যর্থ হয়েছে, আবার চেষ্টা করুন।', en: 'Failed, please try again.' },
+  cancelledLbl: { bn: 'বাতিল হয়েছে', en: 'Cancelled' },
   siLoginFail: { bn: 'লগইন করা যায়নি। তথ্য ঠিক আছে কিনা দেখুন।', en: "Couldn't log in. Check your details." },
   siSignupFail: { bn: 'অ্যাকাউন্ট খোলা যায়নি। আবার চেষ্টা করুন।', en: "Couldn't create the account. Try again." },
   siAccount: { bn: 'আমার অ্যাকাউন্ট', en: 'My Account' },
@@ -1704,10 +1710,30 @@ async function loadAccountOrders() {
     orders = [...localOrders].reverse();
   }
   if (!orders.length) { box.innerHTML = `<p style="color:var(--muted)">${t('siNoOrders')}</p>`; return; }
+  const canCancelServer = !!fbuid; /* Firebase-এ লগইন করা customer-ই cancel request করতে পারে */
   box.innerHTML = orders.map((o) => {
     const dt = (o.createdAt || '').slice(0, 10);
-    return `<div class="acc-row"><div><b>${esc(o.orderId || '')}</b><div style="font-size:13px; color:var(--muted)">${esc(dt)} • ${esc(stageLabel(o.stage || 'pending'))}</div></div><b>${fmt(o.total || 0)}</b></div>`;
+    const st = o.stage || 'pending';
+    let action = '';
+    if (st === 'cancelled') {
+      action = `<div><span class="pill no">${t('cancelledLbl')}</span></div>`;
+    } else if (o.cancelRequested) {
+      action = `<div><span class="pill warn">⏳ ${t('cancelReqSent')}</span></div>`;
+    } else if (canCancelServer && o.id && (st === 'pending' || st === 'confirmed')) {
+      action = `<div><button class="btn btn-outline btn-sm" data-cancel="${esc(o.id)}">${t('cancelOrder')}</button></div>`;
+    }
+    return `<div class="acc-row"><div><b>${esc(o.orderId || '')}</b><div style="font-size:13px; color:var(--muted)">${esc(dt)} • ${esc(stageLabel(st))}</div>${action}</div><b>${fmt(o.total || 0)}</b></div>`;
   }).join('');
+  box.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(t('cancelConfirm'))) return;
+    b.disabled = true;
+    try {
+      const r = await fb.requestOrderCancel(b.dataset.cancel);
+      toast(r.ok ? t('cancelReqOk') : t('cancelFail'));
+      if (r.ok) loadAccountOrders();
+      else b.disabled = false;
+    } catch { toast(t('cancelFail')); b.disabled = false; }
+  }));
 }
 
 /* expose inline handlers */

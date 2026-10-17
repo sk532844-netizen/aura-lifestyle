@@ -302,6 +302,7 @@ function openProdForm(id) {
   $('#pfSub').innerHTML = subOptions(p ? p.main : $('#pfMain').value, p ? p.sub : '');
   $('#pfPrice').value = p ? (p.price ?? '') : '';
   $('#pfOldPrice').value = p && p.oldPrice > p.price ? p.oldPrice : '';
+  $('#pfPct').value = p ? pctOf(p.price || 0, p.oldPrice || 0) : '';
   $$('#pfTags input').forEach((cb) => { cb.checked = p ? pTags(p).includes(cb.value) : false; });
   renderSizeRows(p);
   $('#pfVisible').checked = p ? p.visible !== false : true;
@@ -338,8 +339,26 @@ function renderSizeRows(p) {
   $('#pfStockGen').value = p ? (sizes.length ? '' : (p.stock ?? '')) : '';
   syncTotalStock();
 }
-function addSizeRow(size, qty) {
-  const div = document.createElement('div');
+/* % ছাড় ⇄ দাম: একদিকে বসালে অন্যদিকে auto-হিসাব */
+function bindPctCalc(priceSel, oldSel, pctSel) {
+  const priceEl = $(priceSel), oldEl = $(oldSel), pctEl = $(pctSel);
+  if (!priceEl || !oldEl || !pctEl) return;
+  const fromPct = () => {
+    const old = Number(oldEl.value) || 0, pct = Number(pctEl.value) || 0;
+    if (old > 0 && pct > 0 && pct < 100) priceEl.value = Math.round(old * (1 - pct / 100));
+  };
+  const fromPrice = () => {
+    const old = Number(oldEl.value) || 0, pr = Number(priceEl.value) || 0;
+    pctEl.value = (old > pr && pr >= 0) ? Math.round((old - pr) / old * 100) : '';
+  };
+  oldEl.addEventListener('input', fromPct);
+  pctEl.addEventListener('input', fromPct);
+  priceEl.addEventListener('input', fromPrice);
+}
+function pctOf(price, oldPrice) {
+  return (oldPrice > price && price >= 0) ? Math.round((oldPrice - price) / oldPrice * 100) : '';
+}
+function addSizeRow(size, qty) {  const div = document.createElement('div');
   div.className = 'size-row-edit';
   div.innerHTML = `<input class="sz-name" placeholder="সাইজ (M)" value="${esc(size || '')}">
     <input class="sz-qty" type="number" min="0" placeholder="পিস" value="${qty === '' ? '' : (Number(qty) || 0)}">
@@ -491,6 +510,9 @@ function initProducts() {
   $('#prodSave').addEventListener('click', saveProdForm);
   $('#addImgRow').addEventListener('click', () => addImgRow(''));
   $('#addSizeRow').addEventListener('click', () => addSizeRow('', ''));
+  /* % ছাড় ⇄ দাম auto-হিসাব (দুটো দিকেই sync; programmatic set 'input' ফায়ার করে না) */
+  bindPctCalc('#pfPrice', '#pfOldPrice', '#pfPct');
+  bindPctCalc('#cbPrice', '#cbOldPrice', '#cbPct');
   $('#imgFile').addEventListener('change', handleImgFiles);
   $('#pfMain').addEventListener('change', () => { $('#pfSub').innerHTML = subOptions($('#pfMain').value, ''); });
   $('#seedImportBtn').addEventListener('click', async () => {
@@ -717,7 +739,7 @@ function renderComboProdList() {
 function resetComboForm() {
   editingComboId = null; comboImgUrl = ''; comboItems = {};
   $('#comboFormTitle').textContent = 'নতুন কম্বো অফার';
-  $('#cbNameBn').value = ''; $('#cbNameEn').value = ''; $('#cbPrice').value = ''; $('#cbOldPrice').value = '';
+  $('#cbNameBn').value = ''; $('#cbNameEn').value = ''; $('#cbPrice').value = ''; $('#cbOldPrice').value = ''; $('#cbPct').value = '';
   $('#cbVisible').checked = true; $('#cbFreeDel').checked = false; $('#cbImgPrev').style.display = 'none';
   $('#cbCancel').hidden = true;
   renderComboProdList();
@@ -755,6 +777,7 @@ async function loadCombos() {
     $('#comboFormTitle').textContent = 'কম্বো এডিট করুন';
     $('#cbNameBn').value = c.nameBn || ''; $('#cbNameEn').value = c.nameEn || '';
     $('#cbPrice').value = c.price || ''; $('#cbOldPrice').value = c.oldPrice || '';
+    $('#cbPct').value = pctOf(c.price || 0, c.oldPrice || 0);
     $('#cbVisible').checked = c.visible !== false; $('#cbFreeDel').checked = !!c.freeDel;
     if (comboImgUrl) { $('#cbImgPrev').src = comboImgUrl; $('#cbImgPrev').style.display = ''; }
     $('#cbCancel').hidden = false;

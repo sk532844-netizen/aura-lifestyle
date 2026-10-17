@@ -99,6 +99,7 @@
           <label>সাব-ক্যাটাগরি *<select id="pfSub"></select></label>
           <label>দাম (৳) *<input id="pfPrice" type="number" min="0" required></label>
           <label>আগের দাম (৳)<input id="pfOldPrice" type="number" min="0" placeholder="ছাড় না থাকলে খালি"></label>
+          <label>% ছাড়<input id="pfPct" type="number" min="0" max="90" placeholder="যেমন 50"></label>
           <label>স্টক *<input id="pfStock" type="number" min="0" required></label>
           <div><label style="display:block;margin-bottom:6px">ট্যাগ <span class="muted small">(একাধিক টিক দেওয়া যাবে)</span></label>
             <div id="pfTags" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -168,6 +169,7 @@
           <label>English নাম *<input id="cbNameEn"></label>
           <label>কম্বো দাম *<input id="cbPrice" type="number" min="0"></label>
           <label>আগের দাম<input id="cbOldPrice" type="number" min="0"></label>
+          <label>% ছাড়<input id="cbPct" type="number" min="0" max="90" placeholder="যেমন 50"></label>
         </div>
         <label style="display:block; margin-top:8px">ছবি <span class="muted small">(ImgBB আপলোড)</span></label>
         <div style="display:flex; gap:8px; align-items:center; margin:6px 0">
@@ -351,6 +353,6 @@
 <script src="data.js?v=20261018"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="admin-import.js?v=20261015"></script>
-<script type="module" src="admin.js?v=20261018"></script>
+<script type="module" src="admin.js?v=20261018b"></script>
 </body>
 </html>

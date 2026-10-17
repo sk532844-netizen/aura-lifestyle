@@ -425,6 +425,55 @@ export async function fetchUserOrders(uid) {
   } catch (e) { console.warn('[AURA] fetchUserOrders failed:', e); return []; }
 }
 
+/* ---------- customer profile: নিজের cart + order history (users/{uid}) ----------
+   Rules: users/{uid} নিজেরটা নিজে read/write করতে পারে — নতুন collection লাগে না। */
+export async function getMyProfile(uid) {
+  const f = await fb();
+  if (!f || !uid) return null;
+  try {
+    const snap = await f.fFns.getDoc(f.fFns.doc(f.db, C.users, uid));
+    return snap.exists() ? snap.data() : {};
+  } catch (e) { console.warn('[AURA] getMyProfile failed:', e); return null; }
+}
+/* অ্যাকাউন্টের কার্ট সার্ভারে সেভ (login/logout/device বদলে ফিরে পেতে) */
+export async function saveMyCart(uid, cart) {
+  const f = await fb();
+  if (!f || !uid) return { ok: false };
+  try {
+    await f.fFns.setDoc(f.fFns.doc(f.db, C.users, uid),
+      { cart: Array.isArray(cart) ? cart : [], cartUpdatedAt: f.fFns.serverTimestamp() },
+      { merge: true });
+    return { ok: true };
+  } catch (e) { console.warn('[AURA] saveMyCart failed:', e); return { ok: false }; }
+}
+/* অর্ডার প্লেস হলে নিজের orderIds-এ doc-id যোগ (My Orders list-এর জন্য) */
+export async function appendMyOrder(uid, orderDocId) {
+  const f = await fb();
+  if (!f || !uid || !orderDocId) return { ok: false };
+  try {
+    await f.fFns.setDoc(f.fFns.doc(f.db, C.users, uid),
+      { orderIds: f.fFns.arrayUnion(String(orderDocId)), updatedAt: f.fFns.serverTimestamp() },
+      { merge: true });
+    return { ok: true };
+  } catch (e) { console.warn('[AURA] appendMyOrder failed:', e); return { ok: false }; }
+}
+/* নিজের অর্ডার: users/{uid}.orderIds → orders/{docId} get (list-rule ছাড়াই, তাই customer-ও দেখতে পারে) */
+export async function fetchMyOrders(uid) {
+  const f = await fb();
+  if (!f || !uid) return [];
+  try {
+    const prof = await getMyProfile(uid);
+    const ids = (prof && Array.isArray(prof.orderIds) ? prof.orderIds : []).slice(-50);
+    if (!ids.length) return [];
+    const snaps = await Promise.all(
+      ids.map((id) => f.fFns.getDoc(f.fFns.doc(f.db, C.orders, String(id))).catch(() => null)));
+    const list = [];
+    snaps.forEach((s) => { if (s && s.exists()) list.push({ id: s.id, ...s.data() }); });
+    list.sort((a, b) => String(b.createdAt || '') < String(a.createdAt || '') ? -1 : 1);
+    return list;
+  } catch (e) { console.warn('[AURA] fetchMyOrders failed:', e); return []; }
+}
+
 /* ================= NEWSLETTER (WhatsApp numbers) ================= */
 
 export async function saveNewsletterNumber(number) {

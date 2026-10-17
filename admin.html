@@ -100,13 +100,14 @@
           <label>দাম (৳) *<input id="pfPrice" type="number" min="0" required></label>
           <label>আগের দাম (৳)<input id="pfOldPrice" type="number" min="0" placeholder="ছাড় না থাকলে খালি"></label>
           <label>স্টক *<input id="pfStock" type="number" min="0" required></label>
-          <label>ট্যাগ<select id="pfTag">
-            <option value="">— নেই —</option>
-            <option value="flash-sale">ফ্ল্যাশ সেল</option>
-            <option value="best-seller">বেস্ট সেলার</option>
-            <option value="new">নতুন</option>
-            <option value="featured">ফিচার্ড</option>
-          </select></label>
+          <div><label style="display:block;margin-bottom:6px">ট্যাগ <span class="muted small">(একাধিক টিক দেওয়া যাবে)</span></label>
+            <div id="pfTags" style="display:flex;gap:10px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:4px;font-weight:400"><input type="checkbox" value="flash-sale" style="width:16px;height:16px"> ⚡ ফ্ল্যাশ সেল</label>
+              <label style="display:flex;align-items:center;gap:4px;font-weight:400"><input type="checkbox" value="best-seller" style="width:16px;height:16px"> ★ বেস্ট সেলার</label>
+              <label style="display:flex;align-items:center;gap:4px;font-weight:400"><input type="checkbox" value="new" style="width:16px;height:16px"> 🆕 নতুন</label>
+              <label style="display:flex;align-items:center;gap:4px;font-weight:400"><input type="checkbox" value="featured" style="width:16px;height:16px"> ✨ ফিচার্ড</label>
+            </div>
+          </div>
         </div>
         <div class="size-stock-head row-between"><b>সাইজ ও স্টক <span class="muted small">(যে সাইজে ০ থাকবে, ওটায় অর্ডার বন্ধ)</span></b><button type="button" class="btn btn-outline btn-sm" id="addSizeRow">+ সাইজ</button></div>
         <div id="sizeRows"></div>
@@ -314,8 +315,14 @@
         <div class="form-grid">
           <label>WhatsApp নম্বর (880...)<input id="sfWhatsapp" placeholder="8801XXXXXXXXX"></label>
           <label>হটলাইন<input id="sfPhone" placeholder="096XXXXXXXX"></label>
+          <label>Messenger লিংক<input id="sfMessenger" placeholder="https://m.me/..."></label>
           <label>ইমেইল<input id="sfEmail" type="email"></label>
           <label>ঠিকানা<input id="sfAddress"></label>
+        </div>
+        <h3>প্রোমো বার (সাইটের উপরে)</h3>
+        <div class="form-grid">
+          <label>প্রোমো লেখা<input id="sfPromoText" placeholder="যেমন: ৳২০০০-এর ওপরে ফ্রি ডেলিভারি"></label>
+          <label style="display:flex;align-items:center;gap:8px"><input id="sfPromoOn" type="checkbox" style="width:auto"> প্রোমো বার চালু</label>
         </div>
         <h3>সোশ্যাল মিডিয়া</h3>
         <div class="form-grid">
@@ -341,9 +348,9 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="data.js?v=20261015"></script>
+<script src="data.js?v=20261017b"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="admin-import.js?v=20261015"></script>
-<script type="module" src="admin.js?v=20261016e"></script>
+<script type="module" src="admin.js?v=20261017b"></script>
 </body>
 </html>

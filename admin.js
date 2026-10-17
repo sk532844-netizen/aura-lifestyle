@@ -21,6 +21,8 @@ import {
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+/* tags: নতুন `tags` array, পুরনো `tag` string fallback */
+function pTags(p) { if (p && Array.isArray(p.tags) && p.tags.length) return p.tags; return p && p.tag ? [p.tag] : []; }
 const fmt = (n) => '৳' + Number(n || 0).toLocaleString('en-US');
 function fmtDate(ts) {
   try {
@@ -229,8 +231,9 @@ function renderProducts() {
       <td><small>${stockTxt}</small></td>
       <td><button class="pill ${vis ? 'ok' : 'no'} vis-toggle" data-vis="${esc(p.id)}" title="চালু/বন্ধ করুন">${vis ? 'চালু' : 'বন্ধ'}</button></td>
       <td><div style="display:flex; gap:4px">
-        <button class="pill ${p.tag === 'flash-sale' ? 'ok' : ''}" data-tag="flash-sale:${esc(p.id)}" title="Flash Sale-তে রাখুন/সরান">⚡</button>
-        <button class="pill ${p.tag === 'best-seller' ? 'ok' : ''}" data-tag="best-seller:${esc(p.id)}" title="Best Sellers-এ রাখুন/সরান">★</button>
+        <button class="pill ${pTags(p).includes('flash-sale') ? 'ok' : ''}" data-tag="flash-sale:${esc(p.id)}" title="Flash Sale-তে রাখুন/সরান">⚡</button>
+        <button class="pill ${pTags(p).includes('best-seller') ? 'ok' : ''}" data-tag="best-seller:${esc(p.id)}" title="Best Sellers-এ রাখুন/সরান">★</button>
+        <button class="pill ${pTags(p).includes('new') ? 'ok' : ''}" data-tag="new:${esc(p.id)}" title="New Arrivals-এ রাখুন/সরান">🆕</button>
       </div></td>
       <td><div class="row-actions">
         <button class="btn btn-outline btn-sm" data-edit="${esc(p.id)}">এডিট</button>
@@ -248,9 +251,11 @@ async function toggleTag(spec) {
   const [tag, id] = spec.split(':');
   const p = products.find((x) => x.id === id);
   if (!p) return;
-  const nv = p.tag === tag ? '' : tag;
-  const r = await saveProduct({ ...p, tag: nv });
-  if (r.ok) { p.tag = nv; renderProducts(); toast(nv === 'flash-sale' ? '⚡ Flash Sale-এ যোগ হয়েছে।' : nv === 'best-seller' ? '★ Best Sellers-এ যোগ হয়েছে।' : 'ট্যাগ সরানো হয়েছে।'); }
+  let tags = pTags(p);
+  const has = tags.includes(tag);
+  tags = has ? tags.filter((x) => x !== tag) : [...tags, tag];
+  const r = await saveProduct({ ...p, tags, tag: tags[0] || '' });
+  if (r.ok) { p.tags = tags; p.tag = tags[0] || ''; renderProducts(); toast(has ? 'ট্যাগ সরানো হয়েছে।' : 'ট্যাগ যোগ হয়েছে।'); }
   else toast('ব্যর্থ: ' + (r.error || ''));
 }
 
@@ -296,7 +301,7 @@ function openProdForm(id) {
   $('#pfSub').innerHTML = subOptions(p ? p.main : $('#pfMain').value, p ? p.sub : '');
   $('#pfPrice').value = p ? (p.price ?? '') : '';
   $('#pfOldPrice').value = p && p.oldPrice > p.price ? p.oldPrice : '';
-  $('#pfTag').value = p ? (p.tag || '') : '';
+  $$('#pfTags input').forEach((cb) => { cb.checked = p ? pTags(p).includes(cb.value) : false; });
   renderSizeRows(p);
   $('#pfVisible').checked = p ? p.visible !== false : true;
   $('#pfDescBn').value = p ? (p.descBn || '') : '';
@@ -452,6 +457,7 @@ async function saveProdForm() {
     stock = Number($('#pfStockGen').value);
     if (!(stock >= 0)) { err.textContent = 'সঠিক স্টক দিন।'; return; }
   }
+  const formTags = $$('#pfTags input:checked').map((cb) => cb.value);
   const p = {
     id: editingId || nextId(),
     sku: $('#pfSku').value.trim(),
@@ -460,7 +466,7 @@ async function saveProdForm() {
     img: images[0], images,
     descBn: $('#pfDescBn').value.trim(), descEn: $('#pfDescEn').value.trim(),
     sizes, sizeStock,
-    stock, tag: $('#pfTag').value,
+    stock, tags: formTags, tag: formTags[0] || '',
     visible: $('#pfVisible').checked,
   };
   err.textContent = '';
@@ -812,6 +818,9 @@ function renderSettings() {
   v('#sfCity', settings.deliveryCity); v('#sfSub', settings.deliverySub);
   v('#sfOutside', settings.deliveryOutside); v('#sfFreeAbove', settings.freeAbove);
   v('#sfWhatsapp', settings.whatsapp); v('#sfPhone', settings.phone);
+  v('#sfMessenger', settings.messenger);
+  const pb = settings.promoBar || {};
+  v('#sfPromoText', pb.text); $('#sfPromoOn').checked = !!pb.on;
   v('#sfEmail', settings.email); v('#sfAddress', settings.address);
   const soc = settings.social || {};
   v('#sfFb', soc.facebook); v('#sfIg', soc.instagram); v('#sfYt', soc.youtube);
@@ -898,6 +907,8 @@ async function saveSettingsForm() {
     deliveryCity: num('#sfCity'), deliverySub: num('#sfSub'),
     deliveryOutside: num('#sfOutside'), freeAbove: num('#sfFreeAbove'),
     whatsapp: $('#sfWhatsapp').value.trim(), phone: $('#sfPhone').value.trim(),
+    messenger: $('#sfMessenger').value.trim(),
+    promoBar: { text: $('#sfPromoText').value.trim(), on: $('#sfPromoOn').checked },
     email: $('#sfEmail').value.trim(), address: $('#sfAddress').value.trim(),
     social: {
       facebook: $('#sfFb').value.trim(), instagram: $('#sfIg').value.trim(),

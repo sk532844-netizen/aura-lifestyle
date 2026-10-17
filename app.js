@@ -1,8 +1,8 @@
 /* AURA LIFESTYLE — Phase 1: customer website (no admin panel).
    Hash router SPA. Cart + wishlist in localStorage. Orders → Firestore
    (or localStorage demo mode). All renders escape user-entered text. */
-import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock, subscribeProducts, decrementStock } from './firebase.js?v=20261016e';
-import * as fb from './firebase.js?v=20261016e'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
+import { isConfigured, fetchProducts, fetchSettings, saveOrder, fetchOrder, fetchReviews, submitReview, fetchCombos, sizeQty, totalStock, isOutOfStock, subscribeProducts, decrementStock } from './firebase.js?v=20261017b';
+import * as fb from './firebase.js?v=20261017b'; /* namespace: optional auth fns (signIn/signUp/resetPassword/fetchUserOrders) may not exist yet */
 
 /* ---------------- state ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -13,6 +13,33 @@ let LANG = localStorage.getItem('aura_lang') || 'bn';
 let cart = loadLS('aura_cart', []);
 let wish = loadLS('aura_wish', []);
 let localOrders = loadLS('aura_orders_local', []);
+/* per-account cart: লগইন থাকলে cart অ্যাকাউন্টের (Firestore users/{uid}.cart);
+   logout-এ account cart সেভ করে local cart খালি করা হয়। */
+let accountUid = null;
+let cartSaveT = null;
+function persistCart() {
+  saveLS('aura_cart', cart);
+  if (accountUid && isConfigured() && fb && typeof fb.saveMyCart === 'function') {
+    clearTimeout(cartSaveT);
+    cartSaveT = setTimeout(() => { fb.saveMyCart(accountUid, cart); }, 800);
+  }
+}
+function cartKey(i) { return (i && i.combo ? 'combo:' + (i.combo.id || i.id) : (i.id || '') + '|' + (i.size || '')); }
+/* login-এ: guest cart + account cart merge করে account cart-এ নাও */
+async function switchToAccountCart(uid) {
+  accountUid = uid || null;
+  if (!accountUid) return;
+  const guest = Array.isArray(cart) ? [...cart] : [];
+  let remote = [];
+  if (isConfigured() && fb && typeof fb.getMyProfile === 'function') {
+    try { const p = await fb.getMyProfile(accountUid); if (p && Array.isArray(p.cart)) remote = p.cart; } catch { /* offline — guest cart-ই থাক */ }
+  }
+  const seen = new Set(remote.map(cartKey));
+  guest.forEach((g) => { if (g && !seen.has(cartKey(g))) { remote.push(g); seen.add(cartKey(g)); } });
+  cart = remote;
+  persistCart();
+  updateBadges();
+}
 let seedReviews = {
   p01: [{ name: 'আব্দুল্লাহ', rating: 5, text: 'কাপড়টা খুব ভালো, ঈদের জন্য নিয়েছি।', date: '12 Oct 2026', verified: true }],
   p11: [{ name: 'ফাতিমা', rating: 5, text: 'সুগন্ধি সারাদিন থাকে। আবার নেবো।', date: '08 Oct 2026', verified: true }],
@@ -32,6 +59,9 @@ function visibleMains() { const hidden = (SETTINGS.hiddenCategories || []); retu
 function catVisible(p) { const hidden = (SETTINGS.hiddenCategories || []); return !hidden.includes(p.main); }
 function prodMainLabel(p) { const m = mainOf(p.main); const s = subOf(p.main, p.sub); return (LANG === 'bn' ? m.bn : m.en) + ' › ' + (LANG === 'bn' ? s.bn : s.en); }
 function prodById(id) { return PRODUCTS.find((p) => p.id === id); }
+/* tags: নতুন `tags` array, পুরনো `tag` string fallback */
+function pTags(p) { if (p && Array.isArray(p.tags) && p.tags.length) return p.tags; return p && p.tag ? [p.tag] : []; }
+function hasTag(p, t) { return pTags(p).includes(t); }
 function stars(n) { return '★★★★★'.slice(0, Math.round(n)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(n)); }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2600); }
 function validPhone(p) { return /^01[3-9]\d{8}$/.test(String(p || '').trim()); }
@@ -41,6 +71,8 @@ const I18N = {
   /* header / footer / chrome */
   track: { bn: 'অর্ডার ট্র্যাক করুন', en: 'Track Order' },
   wishlist: { bn: 'উইশলিস্ট', en: 'Wishlist' },
+  account: { bn: 'অ্যাকাউন্ট', en: 'Account' },
+  filterSize: { bn: 'সাইজ', en: 'Size' },
   cart: { bn: 'কার্ট', en: 'Cart' },
   signin: { bn: 'সাইন ইন', en: 'Sign In' },
   searchPh: { bn: 'প্রোডাক্ট খুঁজুন...', en: 'Search products...' },
@@ -95,6 +127,8 @@ const I18N = {
   lowStock: { bn: 'মাত্র {n}টি বাকি', en: 'Only {n} left' },
   outStock: { bn: 'স্টক শেষ', en: 'Out of Stock' },
   sizeNA: { bn: 'সাইজ এভেলেবেল নেই', en: 'Size not available' },
+  sizeGuide: { bn: 'সাইজ গাইড', en: 'Size Guide' },
+  sizeGuideNote: { bn: 'বুকের মাপ: বগলের নিচ দিয়ে চারপাশে মাপুন। লম্বা: কাঁধ থেকে নিচ পর্যন্ত।', en: 'Chest: measure around under the arms. Length: shoulder to bottom.' },
   freeShip: { bn: 'ফ্রি ডেলিভারি', en: 'Free Delivery' },
   waOrder: { bn: 'WhatsApp-এ অর্ডার', en: 'Order on WhatsApp' },
   maxPrice: { bn: 'সর্বোচ্চ দাম', en: 'Max price' },
@@ -365,8 +399,15 @@ async function init() {
     if (remoteProducts) PRODUCTS = remoteProducts;
     if (remoteSettings) { SETTINGS = { ...DEFAULT_SETTINGS, ...remoteSettings }; applyStaticI18n(); }
   } catch { /* seed fallback */ }
+  renderPromoBar();
+  renderFloatBtns();
   buildNav();
   updateBadges();
+  /* পুরনো session থাকলে account cart restore */
+  try {
+    const su = loadLS('aura_user', null);
+    if (su && su.uid && isConfigured()) await switchToAccountCart(su.uid);
+  } catch { /* guest cart-ই থাকে */ }
   window.addEventListener('hashchange', route);
   route();
   startFlashTimer();
@@ -409,12 +450,72 @@ function buildNav() {
     return `<div class="nav-item"><a href="#shop?main=${m.slug}" class="${active}">${esc(label)}</a><div class="mega"><div class="mega-head">${esc(label)}</div>${subs}</div></div>`;
   }).join('');
   $('#navCats').innerHTML = `<a href="#home" class="${homeCls}">${t('home')}</a><a href="#shop" class="${shopCls}">${t('shop')}</a>${items}`;
+  renderBottomNav(cur);
+}
+
+/* ---------- promo bar + floating contact buttons ---------- */
+function renderPromoBar() {
+  let bar = $('#promoBar');
+  const pb = SETTINGS.promoBar || {};
+  const show = pb.on && pb.text && String(pb.text).trim();
+  if (!show) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'promoBar';
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
+  bar.innerHTML = `<span>${esc(String(pb.text))}</span>`;
+}
+function renderFloatBtns() {
+  let fb2 = $('#floatBtns');
+  if (!fb2) {
+    fb2 = document.createElement('div');
+    fb2.id = 'floatBtns';
+    document.body.appendChild(fb2);
+  }
+  const phone = (SETTINGS.phone || '').replace(/\s/g, '');
+  let msg = (SETTINGS.messenger || '').trim();
+  if (msg && !/^https?:\/\//i.test(msg)) msg = 'https://m.me/' + msg;
+  fb2.innerHTML = `
+    ${phone ? `<a class="float-btn fb-call" href="tel:${esc(phone)}" aria-label="call">📞</a>` : ''}
+    ${msg ? `<a class="float-btn fb-msg" href="${esc(msg)}" target="_blank" rel="noopener" aria-label="messenger">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="#fff"><path d="M12 2C6.48 2 2 6.14 2 11.25c0 2.92 1.56 5.54 4 7.32V22l3.66-2.01c.97.27 2 .42 3.08.42 5.52 0 10-4.14 10-9.25S17.52 2 12 2zm5.2 12.5-2.7 4.29c-.43.68-1.5.6-1.83-.15l-2.03-4.6c-.16-.37-.72-.37-.88 0l-1.66 4.07c-.3.73-1.33.62-1.7-.18l-2.5-5.4c-.28-.6.2-1.28.85-1.2l8.9 1.1c.7.09 1 .9.55 1.07z" opacity=".95"/></svg></a>` : ''}`;
+  fb2.style.display = fb2.innerHTML.trim() ? '' : 'none';
+}
+
+/* মোবাইল bottom nav — Infinity-স্টাইল: Home / Shop / Cart / Wishlist / Account */
+function renderBottomNav(cur) {
+  let bn = $('#bottomNav');
+  if (!bn) {
+    bn = document.createElement('nav');
+    bn.id = 'bottomNav';
+    bn.setAttribute('aria-label', 'mobile nav');
+    document.body.appendChild(bn);
+  }
+  const path = cur === '' ? 'home' : cur;
+  const active = (k) => path === k || path.startsWith(k + '/') || path.startsWith(k + '?') ? 'active' : '';
+  const shopActive = active('shop') || active('product') || active('offers') ? 'active' : '';
+  const cartN = cart.reduce((s, i) => s + (i.qty || 0), 0);
+  bn.innerHTML = `
+    <a href="#home" class="${active('home')}"><span class="bn-ic">⌂</span><span class="bn-tx">${t('home')}</span></a>
+    <a href="#shop" class="${shopActive}"><span class="bn-ic">▦</span><span class="bn-tx">${t('shop')}</span></a>
+    <a href="#cart" class="${active('cart') || active('checkout')}"><span class="bn-ic">🛒</span><span class="bn-tx">${t('cart')}</span>${cartN ? `<b class="bn-badge">${cartN}</b>` : ''}</a>
+    <a href="#wishlist" class="${active('wishlist')}"><span class="bn-ic">♡</span><span class="bn-tx">${t('wishlist')}</span></a>
+    <a href="#signin" class="${active('signin')}"><span class="bn-ic">👤</span><span class="bn-tx">${t('account')}</span></a>`;
 }
 
 function updateBadges() {
   const n = cart.reduce((s, i) => s + i.qty, 0);
   $('#cartCount').textContent = n;
   $('#wishCount').textContent = wish.length;
+  const bnc = document.querySelector('#bottomNav a[href="#cart"]');
+  if (bnc) {
+    let bdg = bnc.querySelector('.bn-badge');
+    if (n > 0) {
+      if (!bdg) { bdg = document.createElement('b'); bdg.className = 'bn-badge'; bnc.appendChild(bdg); }
+      bdg.textContent = n;
+    } else if (bdg) bdg.remove();
+  }
   const b = $('#cartBubble');
   if (b) {
     $('#cbCount').textContent = n;
@@ -514,11 +615,9 @@ function prodCard(p) {
     ${off > 0 ? `<span class="badge-off">-${off}%</span>` : ''}
     <button class="wish-btn ${wished ? 'on' : ''}" data-wish="${esc(p.id)}" aria-label="wishlist">${wished ? '♥' : '♡'}</button></div>
     <div class="prod-body"><a href="#product/${esc(p.id)}"><h3>${esc(name)}</h3></a>
-    <div class="prod-cat">${esc(prodMainLabel(p))}</div>
-    <div class="stars">${stars(4.5)}</div>
-    <div class="price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}</div>
-    <div class="stock ${stockCls}">${stockTxt}</div>
-    <button class="add-btn" data-add="${esc(p.id)}" ${isOutOfStock(p) ? 'disabled style="opacity:.5"' : ''}>${t('addCart')}</button></div>
+    <div class="price-row"><div class="price"><b>${fmt(p.price)}</b>${off > 0 ? `<s>${fmt(p.oldPrice)}</s>` : ''}</div>
+    <button class="icon-btn" data-add="${esc(p.id)}" aria-label="add to cart" ${oos ? 'disabled style="opacity:.35;pointer-events:none"' : ''}>🛒</button></div>
+    <div class="stock ${stockCls}">${stockTxt}</div></div>
   </article>`;
 }
 
@@ -529,8 +628,9 @@ function view404() {
 
 /* ---------------- HOME (compact) ---------------- */
 function viewHome() {
-  const flash = PRODUCTS.filter((p) => p.tag === 'flash-sale' && !isOutOfStock(p) && p.visible !== false && catVisible(p)).slice(0, 4);
-  const best = PRODUCTS.filter((p) => p.tag === 'best-seller' && p.visible !== false && catVisible(p)).slice(0, 4);
+  const flash = PRODUCTS.filter((p) => hasTag(p, 'flash-sale') && !isOutOfStock(p) && p.visible !== false && catVisible(p)).slice(0, 4);
+  const best = PRODUCTS.filter((p) => hasTag(p, 'best-seller') && p.visible !== false && catVisible(p)).slice(0, 4);
+  const news = PRODUCTS.filter((p) => hasTag(p, 'new') && p.visible !== false && catVisible(p)).slice(0, 8);
   const mains = visibleMains();
   const banners = (SETTINGS.heroBanners || []).filter((b) => b && b.img);
   const heroSlides = banners.length
@@ -556,6 +656,7 @@ function viewHome() {
   }).join('')}</div></section>
 
   ${flash.length ? `<section class="section"><div class="flash-box"><div class="flash-head"><h2>${t('flash')}</h2><div class="countdown" id="countdown"></div></div><div class="prod-row" style="margin-top:14px">${flash.map(prodCard).join('')}</div></div></section>` : ''}
+  ${news.length ? `<section class="section"><div class="section-head"><h2>${t('newArr')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${news.map(prodCard).join('')}</div></section>` : ''}
   <div id="homeCombos"></div>
 
   <section class="section"><div class="section-head"><h2>${t('best')}</h2><a href="#shop">${t('viewAll')} →</a></div><div class="prod-row">${best.map(prodCard).join('')}</div></section>
@@ -635,7 +736,7 @@ function addComboToCart(id) {
     id: cid, size: '', qty: 1,
     combo: { id: c.id, nameBn: c.nameBn, nameEn: c.nameEn, img: c.img || '', price: Number(c.price) || 0, freeDel: !!c.freeDel },
   });
-  saveLS('aura_cart', cart);
+  persistCart();
   updateBadges();
   toast(t('addedCart'));
 }
@@ -646,6 +747,7 @@ function viewShop(params) {
   const q = (params.get('q') || '').toLowerCase();
   const sort = params.get('sort') || 'popular';
   const maxPrice = parseInt(params.get('max') || '0', 10);
+  const sizeF = params.get('size') || '';
   let list = PRODUCTS.filter((p) => p.stock >= 0 && p.visible !== false && catVisible(p));
   if (main) list = list.filter((p) => p.main === main);
   if (sub) list = list.filter((p) => p.sub === sub);
@@ -657,18 +759,21 @@ function viewShop(params) {
   }
   const isSkuQuery = /^[a-z]\d+$/i.test(q);
   if (maxPrice > 0) list = list.filter((p) => p.price <= maxPrice);
+  if (sizeF) list = list.filter((p) => sizeQty(p, sizeF) > 0);
   if (sort === 'low') list = [...list].sort((a, b) => a.price - b.price);
   else if (sort === 'high') list = [...list].sort((a, b) => b.price - a.price);
   else if (sort === 'new') list = [...list].reverse();
   const page = Math.max(1, parseInt(params.get('page') || '1', 10));
   const PER = 12, pages = Math.max(1, Math.ceil(list.length / PER));
   const slice = list.slice((page - 1) * PER, page * PER);
-  const base = `#shop?${main ? 'main=' + main + '&' : ''}${sub ? 'sub=' + sub + '&' : ''}${q ? 'q=' + encodeURIComponent(q) + '&' : ''}${maxPrice ? 'max=' + maxPrice + '&' : ''}sort=${sort}`;
+  const base = `#shop?${main ? 'main=' + main + '&' : ''}${sub ? 'sub=' + sub + '&' : ''}${q ? 'q=' + encodeURIComponent(q) + '&' : ''}${maxPrice ? 'max=' + maxPrice + '&' : ''}${sizeF ? 'size=' + encodeURIComponent(sizeF) + '&' : ''}sort=${sort}`;
   const mainLabel = main ? (LANG === 'bn' ? mainOf(main).bn : mainOf(main).en) : '';
   const subLabel = (main && sub) ? (LANG === 'bn' ? subOf(main, sub).bn : subOf(main, sub).en) : '';
   const heading = main ? (sub ? `${mainLabel} › ${subLabel}` : mainLabel) : (q ? t('searchRes', { q }) : t('shop'));
   const mains = visibleMains();
   const subs = main ? mainOf(main).subs : [];
+  const allSizes = [...new Set(PRODUCTS.flatMap((p) => p.sizes || []))];
+  const sizeBase = `#shop?${main ? 'main=' + main + '&' : ''}${sub ? 'sub=' + sub + '&' : ''}${q ? 'q=' + encodeURIComponent(q) + '&' : ''}${maxPrice ? 'max=' + maxPrice + '&' : ''}sort=${sort}`;
   const allPrices = PRODUCTS.filter((x) => x.visible !== false && catVisible(x)).map((x) => x.price);
   const pMin = Math.min(...allPrices), pMax = Math.max(...allPrices);
   const sliderVal = maxPrice > 0 ? Math.min(maxPrice, pMax) : pMax;
@@ -685,6 +790,11 @@ function viewShop(params) {
     <button class="chip ${!main ? 'on' : ''}" onclick="location.hash='#shop'">${t('all')}</button>
     ${mains.map((m) => `<button class="chip ${main === m.slug ? 'on' : ''}" onclick="location.hash='#shop?main=${m.slug}'">${esc(LANG === 'bn' ? m.bn : m.en)}</button>`).join('')}
   </div>
+  ${allSizes.length ? `<div class="filter-label">${t('filterSize')}</div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px">
+    <button class="chip ${!sizeF ? 'on' : ''}" onclick="location.hash='${sizeBase}'">${t('all')}</button>
+    ${allSizes.map((s) => `<button class="chip ${sizeF === s ? 'on' : ''}" onclick="location.hash='${sizeBase}&size=${encodeURIComponent(s)}'">${esc(s)}</button>`).join('')}
+  </div>` : ''}
   ${main ? `<div class="filter-label">${esc(mainLabel)} — ${t('subcat')}</div>
   <div class="sub-chips">
     <button class="chip sub-chip ${!sub ? 'on' : ''}" onclick="location.hash='#shop?main=${main}'">${t('all')}</button>
@@ -723,7 +833,7 @@ function viewProduct(id) {
         const sizes = p.sizes || [];
         const naSizes = sizes.filter((s) => sizeQty(p, s) <= 0);
         const sizeHtml = sizes.length
-          ? `<div style="margin-top:14px"><b>${t('sizeSel')}</b></div>
+          ? `<div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center"><b>${t('sizeSel')}</b><button class="btn btn-outline btn-sm" id="sizeGuideBtn">📏 ${t('sizeGuide')}</button></div>
       <div class="size-row" id="sizeRow">${sizes.map((s) => {
             const dis = sizeQty(p, s) <= 0;
             return `<button class="size-btn${dis ? ' sold-out' : ''}" data-size="${esc(s)}" ${dis ? 'disabled' : ''}>${esc(s)}</button>`;
@@ -750,6 +860,24 @@ function viewProduct(id) {
   <div id="reviewsSection"></div>
   ${related.length ? `<div class="section"><div class="section-head"><h2>${t('related')}</h2></div><div class="prod-row">${related.map(prodCard).join('')}</div></div>` : ''}
   </section>`;
+}
+
+/* ================= SIZE GUIDE ================= */
+const SIZE_CHART = [
+  ['S', '৩৮', '২৭'], ['M', '৪০', '২৮'], ['L', '৪২', '২৯'], ['XL', '৪৪', '৩০'], ['XXL', '৪৬', '৩১'],
+];
+function openSizeGuide() {
+  const old = $('#sizeGuideModal'); if (old) old.remove();
+  const m = document.createElement('div');
+  m.id = 'sizeGuideModal';
+  m.innerHTML = `<div id="sgBack" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px"><div style="background:#fff;border-radius:12px;max-width:430px;width:100%;padding:20px;max-height:82vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="margin:0">📏 ${t('sizeGuide')}</h3><button class="btn btn-outline btn-sm" id="sgClose">✕</button></div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px"><tr style="background:var(--navy);color:#fff"><th style="padding:8px">সাইজ</th><th style="padding:8px">বুক (ইঞ্চি)</th><th style="padding:8px">লম্বা (ইঞ্চি)</th></tr>
+    ${SIZE_CHART.map((r) => `<tr style="border-bottom:1px solid var(--line)"><td style="padding:8px;text-align:center;font-weight:700">${r[0]}</td><td style="padding:8px;text-align:center">${r[1]}</td><td style="padding:8px;text-align:center">${r[2]}</td></tr>`).join('')}
+    </table><p class="muted" style="font-size:12px;margin:10px 0 0">${t('sizeGuideNote')}</p></div></div>`;
+  document.body.appendChild(m);
+  $('#sgClose').onclick = () => m.remove();
+  $('#sgBack').addEventListener('click', (e) => { if (e.target.id === 'sgBack') m.remove(); });
 }
 
 /* ================= LIVE STOCK UI ================= */
@@ -800,7 +928,7 @@ function addToCart(id, qty, size) {
   const ex = cart.find((i) => i.id === id && i.size === (size || ''));
   if (ex) ex.qty = Math.min(ex.qty + qty, avail === Infinity ? 99 : avail);
   else cart.push({ id, qty: Math.min(qty, avail === Infinity ? 99 : avail), size: size || '' });
-  saveLS('aura_cart', cart);
+  persistCart();
   updateBadges();
   toast(t('addedToast', { n: LANG === 'bn' ? p.nameBn : p.nameEn }));
 }
@@ -815,12 +943,12 @@ function setQty(id, size, delta) {
   if (!it) return;
   it.qty += delta;
   if (it.qty <= 0) cart = cart.filter((i) => i !== it);
-  saveLS('aura_cart', cart);
+  persistCart();
   updateBadges(); route();
 }
 function removeItem(id, size) {
   cart = cart.filter((i) => !(i.id === id && i.size === size));
-  saveLS('aura_cart', cart);
+  persistCart();
   updateBadges(); route();
 }
 
@@ -973,9 +1101,16 @@ async function placeOrder(e) {
     };
     const remoteId = await saveOrder(order);
     if (!remoteId) { localOrders.push(order); saveLS('aura_orders_local', localOrders); }
-    else { try { await decrementStock(order.items); } catch (e) { console.warn('[AURA] stock decrement skipped:', e); } }
+    else {
+      try { await decrementStock(order.items); } catch (e) { console.warn('[AURA] stock decrement skipped:', e); }
+      /* লগইন থাকলে নিজের orderIds-এ যোগ — My Orders-এ দেখাবে */
+      try {
+        const ouid = sessUser && sessUser.uid && !/^\S+@\S+\.\S+$/.test(sessUser.uid) ? sessUser.uid : '';
+        if (ouid && fb && typeof fb.appendMyOrder === 'function') await fb.appendMyOrder(ouid, remoteId);
+      } catch (e) { console.warn('[AURA] appendMyOrder skipped:', e); }
+    }
     cart = [];
-    saveLS('aura_cart', cart);
+    persistCart();
     updateBadges();
     saveLS('aura_last_order', order);
     location.hash = '#order-success/' + orderId;
@@ -1247,6 +1382,7 @@ bindDynamic = function () {
   if (fQ) fQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const u = new URLSearchParams(location.hash.split('?')[1] || ''); const v = fQ.value.trim(); if (v) u.set('q', v); else u.delete('q'); u.delete('page'); location.hash = '#shop?' + u.toString(); } });
   /* product detail */
   const pd = $('#sizeRow');
+  const sg = $('#sizeGuideBtn'); if (sg) sg.onclick = openSizeGuide;
   if (pd) {
     let selSize = null, qty = 1;
     const pid = location.hash.split('/')[1];
@@ -1339,7 +1475,19 @@ bindDynamic = function () {
     catch { $('#siErr').textContent = t('siLoginFail'); }
   });
   const outBtn = $('#siLogout');
-  if (outBtn) outBtn.addEventListener('click', () => { try { localStorage.removeItem('aura_user'); } catch {} route(); });
+  if (outBtn) outBtn.addEventListener('click', async () => {
+    /* logout-এ account cart সার্ভারে সেভ করে local cart খালি করো */
+    try {
+      const u0 = loadLS('aura_user', null);
+      if (u0 && u0.uid && isConfigured() && fb && typeof fb.saveMyCart === 'function') {
+        await fb.saveMyCart(u0.uid, cart);
+      }
+    } catch { /* best-effort */ }
+    accountUid = null;
+    cart = [];
+    try { localStorage.removeItem('aura_user'); } catch {}
+    persistCart(); updateBadges(); route();
+  });
   if ($('#accOrders')) loadAccountOrders();
 };
 
@@ -1524,6 +1672,7 @@ async function doLogin(email, pw) {
     if (r && r.ok && r.user) {
       const user = r.user;
       const u = saveSessionUser({ uid: user.uid, email: user.email || email, name: user.displayName || '' });
+      await switchToAccountCart(u.uid);
       toast(t('siWelcome', { n: u.name || u.email }));
       route();
     } else { const e = $('#siErr'); if (e) e.textContent = (r && r.error) || t('siLoginFail'); }
@@ -1536,6 +1685,7 @@ async function doSignup(name, email, pw) {
     if (r && r.ok && r.user) {
       const user = r.user;
       const u = saveSessionUser({ uid: user.uid, email: user.email || email, name: user.displayName || name });
+      await switchToAccountCart(u.uid);
       toast(t('siWelcome', { n: u.name || u.email }));
       route();
     } else { const e = $('#suErr'); if (e) e.textContent = (r && r.error) || t('siSignupFail'); }
@@ -1546,8 +1696,10 @@ async function loadAccountOrders() {
   if (!box) return;
   const u = loadLS('aura_user', null);
   let orders = [];
-  if (u && isConfigured() && typeof fb.fetchUserOrders === 'function') {
-    try { orders = (await fb.fetchUserOrders(u.uid || u.email)) || []; } catch { orders = []; }
+  const fbuid = u && u.uid && !/^\S+@\S+\.\S+$/.test(u.uid) ? u.uid : '';
+  if (fbuid && isConfigured() && fb && typeof fb.fetchMyOrders === 'function') {
+    /* users/{uid}.orderIds → orders/{id} get — customer-এর জন্য rules-allowed */
+    try { orders = (await fb.fetchMyOrders(fbuid)) || []; } catch { orders = []; }
   } else {
     orders = [...localOrders].reverse();
   }

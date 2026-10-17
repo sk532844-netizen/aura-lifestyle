@@ -217,6 +217,8 @@ const DEFAULT_SETTINGS = {
   sections: { hero: true, flashSale: true, combo: true, testimonials: true, bestSellers: true, newArrivals: true },
   hiddenCategories: [], /* main-category slugs hidden from storefront */
   social: { facebook: '', instagram: '', youtube: '' }, /* footer social icons */
+  messenger: '', /* Messenger link (https://m.me/...) — খালি রাখলে বাটন দেখাবে না */
+  promoBar: { text: '', on: false }, /* উপরের প্রোমো বার */
   imgbbKey: '', /* free image upload API key (imgbb.com) */
 };
 

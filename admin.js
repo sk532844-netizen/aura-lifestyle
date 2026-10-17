@@ -8,6 +8,7 @@ import {
   fetchSettings, saveSettings,
   fetchOrders, updateOrderStatus, updateOrderStatusByOrderId, setOrderPaid, setOrderPaidByOrderId,
   requestOrderCancel, confirmOrderCancel,
+  fetchCoupons, saveCoupon, deleteCoupon,
   fetchAllReviews, deleteReview, submitReview, fetchHomepageReviews,
   fetchAllCombos, saveCombo, deleteCombo,
   fetchNewsletterNumbers,
@@ -47,7 +48,7 @@ let editingId = null;
 let myRole = 'none'; /* owner | manager | assistant | none */
 
 /* Tabs from staff doc (owner = all). Suspended → none. */
-const ALL_TABS = ['dashboard', 'products', 'categories', 'orders', 'reviews', 'newsletter', 'import', 'staff', 'settings'];
+const ALL_TABS = ['dashboard', 'products', 'categories', 'orders', 'reviews', 'combos', 'coupons', 'newsletter', 'import', 'staff', 'settings'];
 const ROLE_BN = { owner: 'মালিক', manager: 'ম্যানেজার', assistant: 'সহকারী', custom: 'কাস্টম', none: '—' };
 let myTabs = [];
 
@@ -136,6 +137,7 @@ function initTabs() {
     if (t === 'orders') renderOrders();
     if (t === 'reviews') loadReviews();
     if (t === 'combos') loadCombos();
+    if (t === 'coupons') loadCoupons();
     if (t === 'newsletter') loadNewsletter();
     if (t === 'categories') renderCategories();
     if (t === 'settings') renderSettings();
@@ -821,6 +823,106 @@ function initCombos() {
   resetComboForm();
 }
 
+/* ================= COUPONS ================= */
+let coupons = [];
+let editingCoupon = '';
+
+function couponRow(c) {
+  const uses = `${c.usedCount || 0}${c.maxUses ? '/' + c.maxUses : ''}`;
+  const dates = [c.startsAt || '', c.endsAt || ''].filter(Boolean).join(' → ') || '—';
+  return `<div class="order-card compact" data-cpn="${esc(c.code)}">
+    <div class="order-head compact-head">
+      <b style="font-size:16px">${esc(c.code)}</b>
+      <span class="pill ${c.active === false ? 'no' : 'ok'}">${c.active === false ? 'বন্ধ' : 'চালু'}</span>
+      <span class="oc-cust">${c.percent || 0}% ছাড়</span>
+      <span class="oc-total">ব্যবহার: ${esc(uses)}</span>
+      <span class="muted small">${esc(dates)}</span>
+      <div style="display:flex; gap:4px; margin-left:auto">
+        <button class="btn btn-outline btn-sm" data-cpnedit="${esc(c.code)}">এডিট</button>
+        <button class="btn btn-outline btn-sm" data-cpntoggle="${esc(c.code)}">${c.active === false ? 'চালু করুন' : 'বন্ধ করুন'}</button>
+        <button class="btn btn-outline btn-sm" data-cpndel="${esc(c.code)}">মুছুন</button>
+      </div>
+    </div>
+    <div class="order-details" style="font-size:13px; color:var(--muted)">
+      মিনিমাম অর্ডার: ${c.minOrder ? fmt(c.minOrder) : '—'} • প্রোডাক্ট: ${(c.productIds || []).length ? esc(c.productIds.join(', ')) : 'সব'}
+    </div>
+  </div>`;
+}
+
+async function loadCoupons() {
+  const r = await fetchCoupons();
+  if (!r.ok) { $('#cpnList').innerHTML = '<p class="muted">লোড ব্যর্থ।</p>'; return; }
+  coupons = r.coupons || [];
+  $('#cpnCount').textContent = coupons.length;
+  $('#cpnList').innerHTML = coupons.map(couponRow).join('') || '<p class="muted">কোনো কুপন নেই।</p>';
+  bindCouponRows();
+}
+
+function bindCouponRows() {
+  $$('#cpnList [data-cpnedit]').forEach((b) => b.addEventListener('click', () => {
+    const c = coupons.find((x) => x.code === b.dataset.cpnedit);
+    if (!c) return;
+    editingCoupon = c.code;
+    $('#cpnFormTitle').textContent = 'কুপন এডিট করুন';
+    $('#cpnCode').value = c.code; $('#cpnCode').disabled = true;
+    $('#cpnPct').value = c.percent || '';
+    $('#cpnFrom').value = c.startsAt || ''; $('#cpnTo').value = c.endsAt || '';
+    $('#cpnMin').value = c.minOrder || ''; $('#cpnMax').value = c.maxUses || '';
+    $('#cpnProds').value = (c.productIds || []).join(', ');
+    $('#cpnActive').checked = c.active !== false;
+    $('#cpnCancel').hidden = false;
+    window.scrollTo(0, 0);
+  }));
+  $$('#cpnList [data-cpntoggle]').forEach((b) => b.addEventListener('click', async () => {
+    const c = coupons.find((x) => x.code === b.dataset.cpntoggle);
+    if (!c) return;
+    const r = await saveCoupon({ code: c.code, active: !(c.active !== false) });
+    if (r.ok) { toast('আপডেট হয়েছে।'); loadCoupons(); } else toast('ব্যর্থ: ' + (r.error || ''));
+  }));
+  $$('#cpnList [data-cpndel]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`কুপন ${b.dataset.cpndel} মুছে ফেলবেন?`)) return;
+    const r = await deleteCoupon(b.dataset.cpndel);
+    if (r.ok) { toast('মুছে ফেলা হয়েছে।'); loadCoupons(); } else toast('ব্যর্থ: ' + (r.error || ''));
+  }));
+}
+
+function resetCouponForm() {
+  editingCoupon = '';
+  $('#cpnFormTitle').textContent = 'নতুন কুপন';
+  ['cpnCode', 'cpnPct', 'cpnFrom', 'cpnTo', 'cpnMin', 'cpnMax', 'cpnProds'].forEach((id) => { $('#' + id).value = ''; });
+  $('#cpnCode').disabled = false;
+  $('#cpnActive').checked = true;
+  $('#cpnCancel').hidden = true;
+  $('#cpnErr').textContent = '';
+}
+
+async function saveCouponForm() {
+  const err = $('#cpnErr');
+  const code = $('#cpnCode').value.toUpperCase().trim().replace(/\s+/g, '');
+  const percent = Number($('#cpnPct').value) || 0;
+  if (!code) { err.textContent = 'কুপন কোড দিন।'; return; }
+  if (!(percent >= 1 && percent <= 90)) { err.textContent = '% ছাড় ১–৯০ এর মধ্যে দিন।'; return; }
+  const startsAt = $('#cpnFrom').value || '', endsAt = $('#cpnTo').value || '';
+  if (startsAt && endsAt && endsAt < startsAt) { err.textContent = 'শেষ তারিখ শুরুর আগে হতে পারে না।'; return; }
+  const data = {
+    code, percent,
+    startsAt, endsAt,
+    minOrder: Number($('#cpnMin').value) || 0,
+    maxUses: Number($('#cpnMax').value) || 0,
+    productIds: $('#cpnProds').value.split(',').map((s) => s.trim()).filter(Boolean),
+    active: $('#cpnActive').checked,
+  };
+  err.textContent = '';
+  const r = await saveCoupon(data);
+  if (r.ok) { toast('কুপন সেভ হয়েছে।'); resetCouponForm(); loadCoupons(); }
+  else { err.textContent = 'ব্যর্থ: ' + (r.error || ''); }
+}
+
+function initCoupons() {
+  $('#cpnSave').addEventListener('click', saveCouponForm);
+  $('#cpnCancel').addEventListener('click', resetCouponForm);
+}
+
 /* ================= NEWSLETTER ================= */
 async function loadNewsletter() {
   const r = await fetchNewsletterNumbers();
@@ -1211,6 +1313,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#catSave').addEventListener('click', saveCategories);
   bindCatImgUpload();
   initCombos();
+  initCoupons();
   $('#orderSearch').addEventListener('input', renderOrders);
   $('#orderFilter').addEventListener('change', renderOrders);
   $('#settingsSave').addEventListener('click', saveSettingsForm);

@@ -13,6 +13,7 @@ let LANG = localStorage.getItem('aura_lang') || 'bn';
 let cart = loadLS('aura_cart', []);
 let wish = loadLS('aura_wish', []);
 let localOrders = loadLS('aura_orders_local', []);
+let appliedCoupon = null; /* checkout-এ প্রয়োগ করা কুপন */
 /* per-account cart: লগইন থাকলে cart অ্যাকাউন্টের (Firestore users/{uid}.cart);
    logout-এ account cart সেভ করে local cart খালি করা হয়। */
 let accountUid = null;
@@ -390,6 +391,20 @@ const I18N = {
   cancelReqOk: { bn: 'বাতিলের অনুরোধ পাঠানো হয়েছে।', en: 'Cancellation requested.' },
   cancelFail: { bn: 'ব্যর্থ হয়েছে, আবার চেষ্টা করুন।', en: 'Failed, please try again.' },
   cancelledLbl: { bn: 'বাতিল হয়েছে', en: 'Cancelled' },
+  cpnPh: { bn: 'কুপন কোড লিখুন', en: 'Enter coupon code' },
+  cpnApply: { bn: 'প্রয়োগ করুন', en: 'Apply' },
+  cpnChecking: { bn: 'যাচাই হচ্ছে…', en: 'Checking…' },
+  cpnOk: { bn: 'কুপন প্রয়োগ হয়েছে!', en: 'Coupon applied!' },
+  cpnBad: { bn: 'ভুল কোড।', en: 'Invalid code.' },
+  cpnInactive: { bn: 'এই কুপন এখন বন্ধ আছে।', en: 'This coupon is disabled.' },
+  cpnExpired: { bn: 'কুপনের মেয়াদ শেষ।', en: 'Coupon expired.' },
+  cpnNotstarted: { bn: 'কুপন এখনো চালু হয়নি।', en: 'Coupon not started yet.' },
+  cpnLimit: { bn: 'এই কুপনের লিমিট শেষ।', en: 'Coupon usage limit reached.' },
+  cpnUsed: { bn: 'আপনি এই কুপন ইতিমধ্যে ব্যবহার করেছেন।', en: 'You have already used this coupon.' },
+  cpnMin: { bn: 'এই কুপন {x}+ অর্ডারে প্রযোজ্য।', en: 'This coupon needs a {x}+ order.' },
+  cpnNoElig: { bn: 'এই কুপন আপনার কার্টের পণ্যে প্রযোজ্য নয়।', en: "This coupon doesn't apply to your cart items." },
+  cpnDisc: { bn: 'কুপন ছাড়', en: 'Coupon discount' },
+  cpnInvalidated: { bn: 'কুপন যাচাই করা যায়নি — আবার চেষ্টা করুন।', en: "Couldn't verify the coupon — try again." },
   siLoginFail: { bn: 'লগইন করা যায়নি। তথ্য ঠিক আছে কিনা দেখুন।', en: "Couldn't log in. Check your details." },
   siSignupFail: { bn: 'অ্যাকাউন্ট খোলা যায়নি। আবার চেষ্টা করুন।', en: "Couldn't create the account. Try again." },
   siAccount: { bn: 'আমার অ্যাকাউন্ট', en: 'My Account' },
@@ -995,6 +1010,59 @@ function deliveryCharge(district, subtotal) {
   if (subtotal >= freeAbove) return 0;
   return deliveryFor(district);
 }
+/* কুপন: কোন আইটেমে প্রযোজ্য তার subtotal (combo বাদ; productIds খালি = সব) */
+function couponEligibleSub(cp) {
+  const ids = (cp && cp.productIds) || [];
+  return cart.reduce((s, i) => {
+    if (i.combo) return s;
+    if (ids.length && !ids.includes(i.id)) return s;
+    const p = prodById(i.id);
+    return s + (p ? p.price * i.qty : 0);
+  }, 0);
+}
+function couponUid() {
+  const u = loadLS('aura_user', null);
+  return (u && u.uid && !/^\S+@\S+\.\S+$/.test(u.uid)) ? u.uid : '';
+}
+/* checkout totals: subtotal → কুপন ছাড় → ডেলিভারি → মোট */
+function refreshCheckoutTotals() {
+  const sub = cartTotal();
+  let disc = 0;
+  if (appliedCoupon) disc = Math.round(couponEligibleSub(appliedCoupon) * (appliedCoupon.percent || 0) / 100);
+  const net = sub - disc;
+  const dv = ($('#coDistrict') || {}).value || '';
+  const d = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(dv, net);
+  const row = $('#cpnRow');
+  if (row) {
+    row.hidden = !(appliedCoupon && disc > 0);
+    if (appliedCoupon && disc > 0) {
+      $('#cpnCodeLbl').textContent = appliedCoupon.code;
+      $('#cpnDiscVal').textContent = '−' + fmt(disc);
+    }
+  }
+  if (d === null) { $('#coDel').textContent = t('fDistrictPh'); $('#coTotal').textContent = fmt(net); $('#coTotalBtn').textContent = fmt(net); }
+  else if (d === 0) { $('#coDel').innerHTML = `<span style="color:var(--green);font-weight:700">${t('freeDel')}</span>`; $('#coTotal').textContent = fmt(net); $('#coTotalBtn').textContent = fmt(net); }
+  else { $('#coDel').textContent = fmt(d); $('#coTotal').textContent = fmt(net + d); $('#coTotalBtn').textContent = fmt(net + d); }
+  return { sub, disc, net, del: d };
+}
+async function applyCoupon() {
+  const inp = $('#cpnCode'), msg = $('#cpnMsg');
+  if (!inp || !msg) return;
+  const code = (inp.value || '').toUpperCase().trim();
+  if (!code || !isConfigured() || !fb || typeof fb.getCoupon !== 'function') { msg.textContent = t('cpnBad'); return; }
+  msg.textContent = t('cpnChecking');
+  try {
+    const cp = await fb.getCoupon(code);
+    const st = fb.couponCheck(cp, cartTotal(), couponUid());
+    if (st === 'min') msg.textContent = t('cpnMin', { x: fmt(cp.minOrder) });
+    else if (st !== 'ok') msg.textContent = t('cpn' + st.charAt(0).toUpperCase() + st.slice(1));
+    if (st !== 'ok') { appliedCoupon = null; refreshCheckoutTotals(); return; }
+    if (couponEligibleSub(cp) <= 0) { msg.textContent = t('cpnNoElig'); appliedCoupon = null; refreshCheckoutTotals(); return; }
+    appliedCoupon = cp;
+    msg.innerHTML = `<span style="color:var(--green); font-weight:700">${t('cpnOk')}</span>`;
+    refreshCheckoutTotals();
+  } catch { msg.textContent = t('cpnBad'); appliedCoupon = null; refreshCheckoutTotals(); }
+}
 /* dynamic bKash/Nagad account-type label from settings (default: personal) */
 function payNumLabel(brand, type) {
   const tp = type === 'merchant' ? t('payTypeMerchant') : t('payTypePersonal');
@@ -1003,6 +1071,7 @@ function payNumLabel(brand, type) {
 
 function viewCheckout() {
   if (!cart.length) return `<div class="empty"><h3>${t('cartEmpty')}</h3><p>${t('cartEmptyP')}</p><a class="btn" href="#shop" style="margin-top:12px">${t('shopCta')}</a></div>`;
+  appliedCoupon = null; /* checkout-এ ঢুকলে কুপন রিসেট */
   const sub = cartTotal();
   const mBk = LANG === 'bn' ? 'বিকাশ' : 'bKash';
   const mNg = LANG === 'bn' ? 'নগদ' : 'Nagad';
@@ -1052,6 +1121,12 @@ function viewCheckout() {
     <h3>${t('coItems')}</h3>
     ${cart.map((i) => { const p = prodById(i.id); if (!p) return ''; return `<div class="tot-row"><span>${esc(LANG === 'bn' ? p.nameBn : p.nameEn)} × ${i.qty}</span><b>${fmt(p.price * i.qty)}</b></div>`; }).join('')}
     <div class="tot-row"><span>${t('subtotal')}</span><b>${fmt(sub)}</b></div>
+    <div class="coupon-box">
+      <input id="cpnCode" placeholder="${t('cpnPh')}" style="text-transform:uppercase" autocomplete="off">
+      <button type="button" class="btn btn-outline btn-sm" id="cpnApply">${t('cpnApply')}</button>
+    </div>
+    <div id="cpnMsg" class="hint" style="margin:4px 0"></div>
+    <div class="tot-row" id="cpnRow" hidden><span>${t('cpnDisc')} (<b id="cpnCodeLbl"></b>)</span><b id="cpnDiscVal" style="color:var(--green)"></b></div>
     <div class="tot-row"><span>${t('delivery')}</span><b id="coDel">${t('fDistrictPh')}</b></div>
     <div class="tot-row grand"><span>${t('total')}</span><b id="coTotal">${fmt(sub)}</b></div>
     <p style="font-size:13px; color:var(--muted); margin-top:10px">${t('coNote')}</p>
@@ -1090,8 +1165,22 @@ async function placeOrder(e) {
   btn.innerHTML = t('ordering');
   try {
     const sub = cartTotal();
-    const del = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(district, sub);
-    const total = sub + del;
+    /* কুপন থাকলে: claim (race-safe) → ছাড় হিসাব */
+    let coupon = null, disc = 0;
+    if (appliedCoupon && isConfigured() && fb && typeof fb.claimCoupon === 'function') {
+      const claim = await fb.claimCoupon(appliedCoupon.code, couponUid(), sub);
+      if (!claim.ok) {
+        err.textContent = t('cpnInvalidated');
+        btn.disabled = false; btn.innerHTML = btnLabel;
+        return;
+      }
+      coupon = { code: claim.coupon.code, percent: claim.coupon.percent };
+      disc = Math.round(couponEligibleSub(claim.coupon) * coupon.percent / 100);
+      appliedCoupon = claim.coupon;
+    }
+    const net = sub - disc;
+    const del = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(district, net);
+    const total = net + del;
     const orderId = 'AL-' + Math.floor(100000 + Math.random() * 900000);
     const sessUser = loadLS('aura_user', null);
     const order = {
@@ -1102,7 +1191,7 @@ async function placeOrder(e) {
       items: cart.map((i) => i.combo
         ? { id: i.id, comboId: i.combo.id, qty: i.qty, size: '', price: i.combo.price, freeDel: !!i.combo.freeDel, name: i.combo.nameEn || i.combo.nameBn || i.id }
         : { id: i.id, qty: i.qty, size: i.size, price: prodById(i.id)?.price || 0, name: prodById(i.id)?.nameEn || i.id }),
-      subtotal: sub, delivery: del, total, stage: 'pending', paid: false, courier: '', trackingNumber: '', dispatchDate: '',
+      subtotal: sub, discount: disc, coupon, delivery: del, total, stage: 'pending', paid: false, courier: '', trackingNumber: '', dispatchDate: '',
       createdAt: new Date().toISOString(),
     };
     const remoteId = await saveOrder(order);
@@ -1138,6 +1227,7 @@ function viewOrderSuccess(orderId) {
     <h3 style="margin:16px 0 6px; color:var(--navy)">${t('osItems')}</h3>
     ${(order.items || []).map((i) => `<div class="tot-row"><span>${esc(i.name)} × ${i.qty}${i.size ? ' ' + t('sizeInParen', { s: i.size }) : ''}</span><b>${fmt(i.price * i.qty)}</b></div>`).join('')}
     <div class="tot-row"><span>${t('subtotal')}</span><b>${fmt(order.subtotal)}</b></div>
+    ${order.discount > 0 ? `<div class="tot-row"><span>${t('cpnDisc')} (${esc(order.coupon?.code || '')})</span><b style="color:var(--green)">−${fmt(order.discount)}</b></div>` : ''}
     <div class="tot-row"><span>${t('delivery')}</span><b>${order.delivery === 0 ? t('freeDel') : fmt(order.delivery)}</b></div>
     <div class="tot-row grand"><span>${t('total')}</span><b>${fmt(order.total)}</b></div>
     <h3 style="margin:16px 0 6px; color:var(--navy)">${t('osDelInfo')}</h3>
@@ -1428,15 +1518,14 @@ bindDynamic = function () {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(done);
       else done();
     }));
-    $('#coDistrict').addEventListener('change', () => {      const dv = $('#coDistrict').value;
-      const sub = cartTotal();
+    $('#coDistrict').addEventListener('change', () => {
+      const dv = $('#coDistrict').value;
       const dt = $('#coDelTime');
       if (dt) dt.textContent = !dv ? '' : (dv.startsWith('ঢাকা (সিটি)') ? t('delTimeIn') : t('delTimeOut'));
-      const d = cart.some((i) => i.combo && i.combo.freeDel) ? 0 : deliveryCharge(dv, sub);
-      if (d === null) { $('#coDel').textContent = t('fDistrictPh'); $('#coTotal').textContent = fmt(sub); $('#coTotalBtn').textContent = fmt(sub); }
-      else if (d === 0) { $('#coDel').innerHTML = `<span style="color:var(--green);font-weight:700">${t('freeDel')}</span>`; $('#coTotal').textContent = fmt(sub); $('#coTotalBtn').textContent = fmt(sub); }
-      else { $('#coDel').textContent = fmt(d); $('#coTotal').textContent = fmt(sub + d); $('#coTotalBtn').textContent = fmt(sub + d); }
+      refreshCheckoutTotals();
     });
+    const cpnBtn = $('#cpnApply');
+    if (cpnBtn) cpnBtn.addEventListener('click', applyCoupon);
   }
   /* track */
   const tr = $('#trBtn');

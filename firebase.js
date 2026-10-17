@@ -35,6 +35,7 @@ const C = {
   reviews: 'reviews',
   users: 'users',
   staff: 'staff',
+  coupons: 'coupons',
 };
 
 /* Owner UID — firestore.rules-এর ownerUid()-এর সাথে মিলিয়ে রাখুন */
@@ -532,6 +533,90 @@ export async function fetchMyOrders(uid) {
     list.sort((a, b) => String(b.createdAt || '') < String(a.createdAt || '') ? -1 : 1);
     return list;
   } catch (e) { console.warn('[AURA] fetchMyOrders failed:', e); return []; }
+}
+
+/* ================= COUPONS ================= */
+
+const normCode = (c) => String(c || '').toUpperCase().trim();
+/* coupon validity check — reasons: bad/inactive/notstarted/expired/limit/used/min */
+export function couponCheck(cp, sub, uid) {
+  if (!cp) return 'bad';
+  if (cp.active === false) return 'inactive';
+  const today = new Date().toISOString().slice(0, 10);
+  if (cp.startsAt && today < cp.startsAt) return 'notstarted';
+  if (cp.endsAt && today > cp.endsAt) return 'expired';
+  if ((cp.maxUses || 0) > 0 && (cp.usedCount || 0) >= cp.maxUses) return 'limit';
+  if (uid && Array.isArray(cp.usedBy) && cp.usedBy.includes(uid)) return 'used';
+  if ((cp.minOrder || 0) > 0 && sub < cp.minOrder) return 'min';
+  return 'ok';
+}
+
+/* Checkout: code দিয়ে coupon পড়া (public get — code জানা থাকতে হবে) */
+export async function getCoupon(code) {
+  const f = await fb();
+  if (!f) return null;
+  try {
+    const snap = await f.fFns.getDoc(f.fFns.doc(f.db, C.coupons, normCode(code)));
+    return snap.exists() ? { code: snap.id, ...snap.data() } : null;
+  } catch (e) { console.warn('[AURA] getCoupon failed:', e); return null; }
+}
+
+/* Checkout: coupon claim — transaction-এ re-validate + usedCount+1 (race-safe) */
+export async function claimCoupon(code, uid, sub) {
+  const f = await fb();
+  if (!f) return { ok: false, reason: 'bad' };
+  const ref = f.fFns.doc(f.db, C.coupons, normCode(code));
+  try {
+    return await f.fFns.runTransaction(f.db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return { ok: false, reason: 'bad' };
+      const cp = { code: snap.id, ...snap.data() };
+      const st = couponCheck(cp, sub, uid);
+      if (st !== 'ok') return { ok: false, reason: st, coupon: cp };
+      const upd = { usedCount: (cp.usedCount || 0) + 1, updatedAt: f.fFns.serverTimestamp() };
+      if (uid) upd.usedBy = f.fFns.arrayUnion(uid);
+      tx.update(ref, upd);
+      return { ok: true, coupon: cp };
+    });
+  } catch (e) { console.warn('[AURA] claimCoupon failed:', e); return { ok: false, reason: 'bad' }; }
+}
+
+/* Admin: সব কুপন */
+export async function fetchCoupons() {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const q = f.fFns.query(f.fFns.collection(f.db, C.coupons));
+    const snap = await f.fFns.getDocs(q);
+    const list = [];
+    snap.forEach((d) => list.push({ code: d.id, ...d.data() }));
+    list.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+    return { ok: true, coupons: list };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+/* Admin: কুপন save (doc ID = code) */
+export async function saveCoupon(data) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    const code = normCode(data.code);
+    if (!code) return { ok: false, error: 'code' };
+    const { code: _c, ...rest } = data;
+    await f.fFns.setDoc(f.fFns.doc(f.db, C.coupons, code), {
+      ...rest, code, updatedAt: f.fFns.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, code };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+
+export async function deleteCoupon(code) {
+  const f = await fb();
+  if (!f) return { ok: false, demo: true };
+  try {
+    await f.fFns.deleteDoc(f.fFns.doc(f.db, C.coupons, normCode(code)));
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }
 
 /* ================= NEWSLETTER (WhatsApp numbers) ================= */

@@ -59,6 +59,7 @@
     <button data-tab="orders">অর্ডার <span class="tab-badge" id="ordersBadge" hidden></span></button>
     <button data-tab="reviews">রিভিউ</button>
     <button data-tab="combos">কম্বো অফার</button>
+    <button data-tab="coupons">কুপন</button>
     <button data-tab="newsletter">নিউজলেটার</button>
     <button data-tab="import">ইমপোর্ট</button>
     <button data-tab="staff">স্টাফ</button>
@@ -207,6 +208,31 @@
       <div id="reviewList" class="order-list"></div>
     </section>
 
+    <!-- COUPONS -->
+    <section id="tab-coupons" class="tab-page" hidden>
+      <div class="card" style="margin-bottom:16px">
+        <h3 id="cpnFormTitle">নতুন কুপন</h3>
+        <div class="form-grid">
+          <label>কুপন কোড *<input id="cpnCode" placeholder="যেমন AURA10" style="text-transform:uppercase"></label>
+          <label>% ছাড় *<input id="cpnPct" type="number" min="1" max="90" placeholder="যেমন 10"></label>
+          <label>শুরু (তারিখ)<input id="cpnFrom" type="date"></label>
+          <label>শেষ (তারিখ)<input id="cpnTo" type="date"></label>
+          <label>মিনিমাম অর্ডার (৳)<input id="cpnMin" type="number" min="0" placeholder="0 = শর্ত নেই"></label>
+          <label>ব্যবহার লিমিট (জন)<input id="cpnMax" type="number" min="0" placeholder="0 = আনলিমিটেড"></label>
+        </div>
+        <label style="display:block; margin-top:8px">প্রোডাক্ট ফিল্টার <span class="muted small">(ID কমা দিয়ে লিখুন — খালি রাখলে সব প্রোডাক্টে চলবে)</span></label>
+        <input id="cpnProds" placeholder="যেমন p01, p02" style="width:100%; padding:8px; margin:6px 0; border:1px solid var(--line); border-radius:8px">
+        <label style="display:flex; align-items:center; gap:6px; margin-top:8px"><input type="checkbox" id="cpnActive" checked style="width:18px; height:18px"> কুপন চালু</label>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <button class="btn btn-sm" id="cpnSave">সেভ করুন</button>
+          <button class="btn btn-outline btn-sm" id="cpnCancel" hidden>বাতিল</button>
+        </div>
+        <div class="err" id="cpnErr"></div>
+      </div>
+      <h3>সব কুপন (<span id="cpnCount">0</span>)</h3>
+      <div id="cpnList" class="order-list"></div>
+    </section>
+
     <!-- NEWSLETTER -->
     <section id="tab-newsletter" class="tab-page" hidden>
       <div class="row-between">
@@ -353,6 +379,6 @@
 <script src="data.js?v=20261018"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="admin-import.js?v=20261015"></script>
-<script type="module" src="admin.js?v=20261018b"></script>
+<script type="module" src="admin.js?v=20261018c"></script>
 </body>
 </html>

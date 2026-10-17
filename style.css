@@ -448,3 +448,7 @@ img { max-width: 100%; display: block; }
 .pill.ok { background: #e6f4ea; color: #16a34a; }
 .pill.no { background: #fdecea; color: #dc2626; }
 .pill.warn { background: #fef3e2; color: #b45309; }
+/* coupon box (checkout) */
+.coupon-box { display: flex; gap: 8px; margin: 10px 0 2px; }
+.coupon-box input { flex: 1; padding: 9px 10px; border: 1.5px dashed var(--line); border-radius: 8px; font-size: 14px; letter-spacing: 1px; }
+.coupon-box input:focus { outline: none; border-color: var(--navy); }
